@@ -1,0 +1,24 @@
+[project]
+name = "orbsim"
+version = "0.1.0"
+description = "Interactive atomic and molecular orbital simulation and visualization"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "OrbSim Contributors"}]
+dependencies = [
+  "numpy",
+  "pyvista",
+  "pyvistaqt",
+  "pyside6",
+]
+
+[project.scripts]
+orbsim = "orbsim.app:main"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
