@@ -2,3 +2,4 @@ numpy
 pyvista
 pyvistaqt
 pyside6
+vtk

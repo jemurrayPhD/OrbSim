@@ -70,6 +70,7 @@ class DropPlotter(QtWidgets.QFrame):
         super().__init__(parent)
         self.setAcceptDrops(True)
         self.setFrameStyle(QtWidgets.QFrame.StyledPanel | QtWidgets.QFrame.Sunken)
+        self._plotter_closed = False
         self.plotter = QtInteractor(self)
 
         layout = QtWidgets.QVBoxLayout(self)
@@ -90,6 +91,17 @@ class DropPlotter(QtWidgets.QFrame):
             if symbol:
                 self.element_dropped.emit(symbol)
             event.acceptProposedAction()
+
+    def cleanup(self) -> None:
+        """Close the underlying VTK render window before Qt tears down."""
+        if self._plotter_closed:
+            return
+        self.plotter.close()
+        self._plotter_closed = True
+
+    def closeEvent(self, event: QtGui.QCloseEvent) -> None:
+        self.cleanup()
+        super().closeEvent(event)
 
 
 class CollapsibleGroup(QtWidgets.QGroupBox):
