@@ -102,6 +102,9 @@ class AtomicOrbitalTab(QtWidgets.QWidget):
         )
         self.plotter.reset_camera()
 
+    def cleanup(self) -> None:
+        self.plotter_frame.cleanup()
+
 
 class MoleculeBuilderTab(QtWidgets.QWidget):
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
@@ -208,6 +211,9 @@ class MoleculeBuilderTab(QtWidgets.QWidget):
 
         self.plotter.reset_camera()
 
+    def cleanup(self) -> None:
+        self.plotter_frame.cleanup()
+
 
 class OrbSimWindow(QtWidgets.QMainWindow):
     def __init__(self) -> None:
@@ -222,6 +228,14 @@ class OrbSimWindow(QtWidgets.QMainWindow):
         self.setCentralWidget(self.tabs)
 
         self.statusBar().showMessage("Drag elements into the visualization pane to begin.")
+
+    def closeEvent(self, event) -> None:
+        for index in range(self.tabs.count()):
+            tab = self.tabs.widget(index)
+            cleanup = getattr(tab, "cleanup", None)
+            if callable(cleanup):
+                cleanup()
+        super().closeEvent(event)
 
 
 def main() -> None:
