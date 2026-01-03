@@ -783,7 +783,7 @@ class AggregatedCraftingSlotWidget(QtWidgets.QFrame):
 
 
 class AggregatedCraftingGridWidget(QtWidgets.QWidget):
-    crafting_changed = QtCore.Signal(dict)
+    crafting_changed = QtCore.Signal(object)
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
