@@ -943,8 +943,6 @@ _PERIODIC_POSITIONS_FULL = {
 
 
 class PeriodicTableInventoryWidget(QtWidgets.QWidget):
-    element_added = QtCore.Signal(int)
-
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
         self._theme_tokens: dict | None = None
@@ -960,17 +958,9 @@ class PeriodicTableInventoryWidget(QtWidgets.QWidget):
             if position is None:
                 continue
             tile = ElementTileWidget(Element(element.symbol, element.name, element.atomic_number), self)
-            tile.mousePressEvent = self._wrap_click(tile.mousePressEvent, element.atomic_number)
             row, col = position
             self._layout.addWidget(tile, row, col)
             self._tiles.append(tile)
-
-    def _wrap_click(self, original, atomic_number: int):
-        def handler(event: QtGui.QMouseEvent) -> None:
-            if event.button() == QtCore.Qt.MouseButton.LeftButton:
-                self.element_added.emit(atomic_number)
-            original(event)
-        return handler
 
     def apply_theme(self, tokens: dict) -> None:
         self._theme_tokens = tokens

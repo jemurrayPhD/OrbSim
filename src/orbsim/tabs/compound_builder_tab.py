@@ -54,7 +54,6 @@ class CompoundBuilderTab(QtWidgets.QWidget):
         self.ui.recipeListWidget.itemSelectionChanged.connect(self._select_compound)
         self.ui.openCitationButton.clicked.connect(self._open_citation_page)
         self.ui.buildDbButton.clicked.connect(self._start_build)
-        self.inventory_widget.element_added.connect(self._add_element_from_inventory)
 
         self.ui.citationLabel.setOpenExternalLinks(True)
         self.ui.citationLabel.setText(
@@ -116,9 +115,6 @@ class CompoundBuilderTab(QtWidgets.QWidget):
     def _on_crafting_changed(self, counts: dict[int, int]) -> None:
         self._update_current_elements_label(counts)
         self._queue_refresh()
-
-    def _add_element_from_inventory(self, atomic_number: int) -> None:
-        self.crafting_grid.add_element(atomic_number)
 
     def _update_current_elements_label(self, counts: dict[int, int]) -> None:
         if not counts:

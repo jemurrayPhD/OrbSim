@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+import math
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
@@ -100,12 +101,12 @@ class AnnotationCanvas(QtWidgets.QGraphicsView):
         arrow_size = 10
         p1 = line.p2()
         p2 = QtCore.QPointF(
-            p1.x() + arrow_size * QtCore.qCos(QtCore.qDegreesToRadians(angle - 20)),
-            p1.y() + arrow_size * QtCore.qSin(QtCore.qDegreesToRadians(angle - 20)),
+            p1.x() + arrow_size * math.cos(math.radians(angle - 20)),
+            p1.y() + arrow_size * math.sin(math.radians(angle - 20)),
         )
         p3 = QtCore.QPointF(
-            p1.x() + arrow_size * QtCore.qCos(QtCore.qDegreesToRadians(angle + 20)),
-            p1.y() + arrow_size * QtCore.qSin(QtCore.qDegreesToRadians(angle + 20)),
+            p1.x() + arrow_size * math.cos(math.radians(angle + 20)),
+            p1.y() + arrow_size * math.sin(math.radians(angle + 20)),
         )
         polygon = QtGui.QPolygonF([p1, p2, p3])
         arrow = QtWidgets.QGraphicsPolygonItem(polygon)
