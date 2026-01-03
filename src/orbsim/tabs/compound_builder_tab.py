@@ -6,7 +6,7 @@ import sys
 from PySide6 import QtCore, QtWidgets
 
 from orbsim.chem.compound_db import db_exists, get_compound_details, get_db_path, query_compounds_by_elements
-from orbsim.chem.elements import ATOMIC_NUMBER_TO_SYMBOL, SYMBOL_TO_ELEMENT
+from orbsim.chem.elements import get_atomic_number, get_symbol
 from orbsim.chem.formula_parser import parse_formula
 from orbsim.ui.generated.ui_compound_builder import Ui_CompoundBuilderTab
 from orbsim.widgets import CraftingTableWidget, CompoundPreviewPane, PeriodicTableInventoryWidget
@@ -44,9 +44,12 @@ class CompoundBuilderTab(QtWidgets.QWidget):
         self.ui.recipeSection.setMinimumSize(320, 320)
         self.ui.dataSection.setMinimumSize(360, 320)
         self.ui.inventorySection.setMinimumHeight(260)
-        self.ui.upperLayout.setStretch(0, 3)
-        self.ui.upperLayout.setStretch(1, 3)
-        self.ui.upperLayout.setStretch(2, 5)
+        self.upper_splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal, self)
+        for section in (self.ui.craftingSection, self.ui.recipeSection, self.ui.dataSection):
+            self.ui.upperLayout.removeWidget(section)
+            self.upper_splitter.addWidget(section)
+        self.upper_splitter.setSizes([360, 360, 520])
+        self.ui.upperLayout.addWidget(self.upper_splitter)
 
         self._update_timer = QtCore.QTimer(self)
         self._update_timer.setSingleShot(True)
@@ -117,8 +120,7 @@ class CompoundBuilderTab(QtWidgets.QWidget):
         self._queue_refresh()
 
     def _add_element_from_inventory(self, atomic_number: int) -> None:
-        symbol = ATOMIC_NUMBER_TO_SYMBOL.get(atomic_number, str(atomic_number))
-        self.crafting_grid.add_element_to_first_empty(atomic_number, symbol)
+        self.crafting_grid.add_element_to_first_empty(atomic_number)
 
     def _update_current_elements_label(self, counts: dict[int, int]) -> None:
         if not counts:
@@ -126,7 +128,9 @@ class CompoundBuilderTab(QtWidgets.QWidget):
             return
         parts = []
         for atomic_number in sorted(counts):
-            symbol = ATOMIC_NUMBER_TO_SYMBOL.get(atomic_number, str(atomic_number))
+            symbol = get_symbol(atomic_number)
+            if not symbol:
+                continue
             count = counts[atomic_number]
             parts.append(f"{symbol}{count if count > 1 else ''}")
         self.ui.currentElementsLabel.setText("Current elements: " + " ".join(parts))
@@ -149,9 +153,9 @@ class CompoundBuilderTab(QtWidgets.QWidget):
             counts = dict(list(counts.items())[:9])
         atomic_counts: dict[int, int] = {}
         for symbol, count in counts.items():
-            element = SYMBOL_TO_ELEMENT.get(symbol)
-            if element:
-                atomic_counts[element.atomic_number] = count
+            atomic_number = get_atomic_number(symbol)
+            if atomic_number:
+                atomic_counts[atomic_number] = count
         self.crafting_grid.set_counts(atomic_counts)
         self._active_formula = text
         self._on_crafting_changed({"counts": self.crafting_grid.counts()})

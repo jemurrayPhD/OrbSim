@@ -4,7 +4,37 @@ from pathlib import Path
 
 from PySide6 import QtCore, QtGui, QtNetwork, QtWidgets
 
-from orbsim.chem.elements import ATOMIC_NUMBER_TO_SYMBOL, electronegativity, is_metal, is_nonmetal
+from orbsim.chem.elements import get_atomic_number, get_element, get_symbol
+
+
+def _element_family(symbol: str) -> str:
+    atomic_number = get_atomic_number(symbol)
+    if atomic_number <= 0:
+        return ""
+    element = get_element(atomic_number)
+    return str(element.get("family") or element.get("category") or element.get("categoryName") or "")
+
+
+def _is_metal_symbol(symbol: str) -> bool:
+    family = _element_family(symbol).lower()
+    return "metal" in family and "nonmetal" not in family and "metalloid" not in family
+
+
+def _is_nonmetal_symbol(symbol: str) -> bool:
+    family = _element_family(symbol).lower()
+    return "nonmetal" in family or "non-metal" in family
+
+
+def _electronegativity_symbol(symbol: str) -> float | None:
+    atomic_number = get_atomic_number(symbol)
+    if atomic_number <= 0:
+        return None
+    element = get_element(atomic_number)
+    value = element.get("electronegativity")
+    try:
+        return None if value in (None, "", "-") else float(value)
+    except Exception:
+        return None
 
 
 PUBCHEM_IMAGE_URL = "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/{cid}/PNG"
@@ -104,7 +134,7 @@ class CompoundDetailsDialog(QtWidgets.QDialog):
         elements = self.compound.get("elements", {})
         self.oxidation_table.setRowCount(0)
         for row_index, (atomic_number, count) in enumerate(sorted(elements.items())):
-            symbol = ATOMIC_NUMBER_TO_SYMBOL.get(int(atomic_number), str(atomic_number))
+            symbol = get_symbol(int(atomic_number))
             state = oxidation_states.get(symbol)
             state_text = str(state) if state is not None else "Unknown"
             self.oxidation_table.insertRow(row_index)
@@ -160,7 +190,7 @@ def estimate_oxidation_states(compound: dict) -> tuple[dict[str, int | None], bo
     elements = compound.get("elements", {})
     symbol_counts = {}
     for atomic_number, count in elements.items():
-        symbol = ATOMIC_NUMBER_TO_SYMBOL.get(int(atomic_number))
+        symbol = get_symbol(int(atomic_number))
         if symbol:
             symbol_counts[symbol] = int(count)
 
@@ -190,12 +220,12 @@ def estimate_oxidation_states(compound: dict) -> tuple[dict[str, int | None], bo
 
 def classify_bonding_and_polarity(compound: dict) -> tuple[str, str]:
     elements = compound.get("elements", {})
-    symbols = [ATOMIC_NUMBER_TO_SYMBOL.get(int(z)) for z in elements.keys()]
+    symbols = [get_symbol(int(z)) for z in elements.keys()]
     symbols = [s for s in symbols if s]
     if not symbols:
         return "Unknown", "Unknown"
-    has_metal = any(is_metal(symbol) for symbol in symbols)
-    has_nonmetal = any(is_nonmetal(symbol) for symbol in symbols)
+    has_metal = any(_is_metal_symbol(symbol) for symbol in symbols)
+    has_nonmetal = any(_is_nonmetal_symbol(symbol) for symbol in symbols)
 
     if has_metal and has_nonmetal:
         bonding = "Ionic (heuristic)"
@@ -204,7 +234,7 @@ def classify_bonding_and_polarity(compound: dict) -> tuple[str, str]:
     else:
         bonding = "Covalent (heuristic)"
 
-    en_values = [electronegativity(symbol) for symbol in symbols if electronegativity(symbol) is not None]
+    en_values = [value for symbol in symbols if (value := _electronegativity_symbol(symbol)) is not None]
     if not en_values:
         polarity = "Unknown"
     else:

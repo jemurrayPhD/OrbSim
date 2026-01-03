@@ -38,6 +38,8 @@ class ElementTileButton(QtWidgets.QAbstractButton):
     def __init__(self, text: str = "", parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
         self.setText(text)
+        self._symbol = ""
+        self._atomic_number = 0
         self.setCheckable(True)
         self._base_color = QtGui.QColor("#94a3b8")
         self._text_color = QtGui.QColor("#0f172a")
@@ -60,6 +62,11 @@ class ElementTileButton(QtWidgets.QAbstractButton):
             light = QtGui.QColor(colors.get("bg", "#f8fafc"))
             dark = QtGui.QColor(colors.get("text", "#0f172a"))
             self._text_color = _contrast_text(self._base_color, light, dark)
+        self.update()
+
+    def set_element(self, symbol: str, atomic_number: int) -> None:
+        self._symbol = symbol
+        self._atomic_number = atomic_number
         self.update()
 
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:
@@ -94,10 +101,22 @@ class ElementTileButton(QtWidgets.QAbstractButton):
 
         font = painter.font()
         font.setBold(True)
-        font.setPointSize(self._font_point_size)
+        font.setPointSize(self._font_point_size + 2)
         painter.setFont(font)
         painter.setPen(QtGui.QPen(self._text_color))
-        painter.drawText(rect, QtCore.Qt.AlignmentFlag.AlignCenter, self.text())
+        painter.drawText(rect, QtCore.Qt.AlignmentFlag.AlignCenter, self._symbol or self.text())
+
+        if self._atomic_number:
+            small_font = painter.font()
+            small_font.setBold(False)
+            small_font.setPointSize(max(self._font_point_size - 2, 7))
+            painter.setFont(small_font)
+            painter.setPen(QtGui.QPen(self._text_color))
+            painter.drawText(
+                rect.adjusted(6, 4, -6, -4),
+                QtCore.Qt.AlignmentFlag.AlignTop | QtCore.Qt.AlignmentFlag.AlignLeft,
+                str(self._atomic_number),
+            )
         painter.end()
 
 

@@ -46,6 +46,7 @@ class BondingOrbitalsTab(AtomicOrbitalsTab):
         self.slice_vmin = None
         self.slice_vmax = None
         super().__init__(parent)
+        self.slice_plane_resolution = 40
         self.animation_timer = QtCore.QTimer(self)
         self.animation_timer.timeout.connect(self._advance_animation)
         self.hybrid_status.setText("Computed default H2-like hybrids. Adjust orbitals and recompute as needed.")
@@ -198,7 +199,20 @@ class BondingOrbitalsTab(AtomicOrbitalsTab):
         prefs_btn.clicked.connect(self._open_preferences)
         three_d_layout.addRow(prefs_btn)
 
+        slicing_group = QtWidgets.QGroupBox("Slicing")
+        slicing_layout = QtWidgets.QFormLayout(slicing_group)
+        self.slice_mode_combo = QtWidgets.QComboBox()
+        self.slice_mode_combo.addItem("None", "none")
+        self.slice_mode_combo.addItem("Plane", "plane")
+        self.slice_mode_combo.addItem("Box clip", "box")
+        self.slice_mode_combo.currentIndexChanged.connect(self._on_slice_mode_change)
+        slicing_layout.addRow("Mode", self.slice_mode_combo)
+        reset_btn = QtWidgets.QPushButton("Reset slicing")
+        reset_btn.clicked.connect(self._reset_slicing)
+        slicing_layout.addRow(reset_btn)
+
         layout.addWidget(three_d_group)
+        layout.addWidget(slicing_group)
 
         two_d_group = QtWidgets.QGroupBox("2D Slice")
         two_d_layout = QtWidgets.QFormLayout(two_d_group)
@@ -656,8 +670,15 @@ class BondingOrbitalsTab(AtomicOrbitalsTab):
                 pass
         if not fields:
             return
+        clip_bounds = self.slice_box_bounds if self.slice_mode == "box" else None
 
         if self.current_representation == "volume":
+            if clip_bounds:
+                try:
+                    volume_field = volume_field.copy()
+                    volume_field.dataset = volume_field.dataset.clip_box(clip_bounds, invert=False)
+                except Exception:
+                    pass
             prob_arr = np.asarray(volume_field.dataset.get_array("probability"))
             vmax = float(np.nanmax(prob_arr)) if prob_arr.size else 1.0
             if vmax <= 0:
@@ -688,8 +709,14 @@ class BondingOrbitalsTab(AtomicOrbitalsTab):
             self._add_iso_surfaces(volume_field, clim)
         else:
             for field in fields:
+                dataset = field.dataset
+                if clip_bounds:
+                    try:
+                        dataset = dataset.clip_box(clip_bounds, invert=False)
+                    except Exception:
+                        dataset = field.dataset
                 self.plotter.add_mesh(
-                    field.dataset,
+                    dataset,
                     scalars=field.scalar_name,
                     cmap=self.current_cmap,
                     opacity=field.opacity,
