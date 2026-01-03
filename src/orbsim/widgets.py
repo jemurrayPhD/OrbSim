@@ -168,6 +168,243 @@ class DropPlotter(QtWidgets.QFrame):
         layout.addWidget(self.plotter, 1)
         layout.addWidget(self.colorbar, 0)
 
+    def apply_theme(self, tokens: dict) -> None:
+        self._theme_tokens = tokens
+        self._apply_colorbar_style()
+        colors = tokens["colors"]
+        try:
+            self.plotter.set_background(colors["surfaceAlt"])
+        except Exception:
+            pass
+        self._apply_bounds()
+
+    def _apply_colorbar_style(self) -> None:
+        colors = (self._theme_tokens or {}).get("colors", {})
+        bg = colors.get("surface", "#111827")
+        text = colors.get("text", "#e5e7eb")
+        border = colors.get("border", "#94a3b8")
+        self.colorbar.setStyleSheet(
+            f"background-color: {bg}; color: {text}; border: 1px solid {border}; padding: 4px;"
+        )
+
+    def _apply_bounds(self) -> None:
+        colors = (self._theme_tokens or {}).get("colors", {})
+        axis_color = colors.get("text", "#f8fafc")
+        if not self.show_bounds_axes:
+            try:
+                self.plotter.remove_bounds_axes()
+            except Exception:
+                pass
+            self._bounds_actor = None
+            return
+        try:
+            self._bounds_actor = self.plotter.show_bounds(
+                grid="front",
+                ticks="both",
+                location="outer",
+                xtitle="x (angstrom)",
+                ytitle="y (angstrom)",
+                ztitle="z (angstrom)",
+                color=axis_color,
+                bold=True,
+                font_size=12,
+                show_xlabels=True,
+                show_ylabels=True,
+                show_zlabels=True,
+                minor_ticks=True,
+            )
+            if self._bounds_actor and hasattr(self._bounds_actor, "GetCubeProperty"):
+                try:
+                    self._bounds_actor.GetCubeProperty().SetLineWidth(2.0)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    def set_show_bounds(self, enabled: bool) -> None:
+        self.show_bounds_axes = bool(enabled)
+        self._apply_bounds()
+
+    def dragEnterEvent(self, event: QtGui.QDragEnterEvent) -> None:
+        if event.mimeData().hasText():
+            event.acceptProposedAction()
+
+    def dragMoveEvent(self, event: QtGui.QDragMoveEvent) -> None:
+        if event.mimeData().hasText():
+            event.acceptProposedAction()
+
+    def dropEvent(self, event: QtGui.QDropEvent) -> None:
+        if event.mimeData().hasText():
+            symbol = event.mimeData().text().strip()
+            if symbol:
+                self.element_dropped.emit(symbol)
+            event.acceptProposedAction()
+
+    def reset_scene(self) -> None:
+        """Clear the scene but keep measurement tools configured."""
+        self.plotter.clear()
+        self._clear_measurements(keep_mode=True)
+        self._apply_bounds()
+        if self._measurement_mode:
+            self.plotter.enable_point_picking(
+                callback=self._on_point_picked,
+                show_message=False,
+                left_clicking=True,
+                use_mesh=True,
+                show_point=False,
+                tolerance=0.025,
+            )
+
+    def set_measurement_mode(self, mode: str | None) -> None:
+        self._measurement_mode = mode
+        self._clear_measurements()
+        if mode:
+            self.plotter.enable_point_picking(
+                callback=self._on_point_picked,
+                show_message=True,
+                left_clicking=True,
+                use_mesh=True,
+                show_point=True,
+                tolerance=0.02,
+            )
+        else:
+            self.plotter.disable_picking()
+
+    def _on_point_picked(self, point: np.ndarray) -> None:
+        if self._measurement_mode is None:
+            return
+        self._picked_points.append(point)
+        if self._measurement_mode == "distance" and len(self._picked_points) == 2:
+            self._measure_distance()
+        elif self._measurement_mode == "angle" and len(self._picked_points) == 3:
+            self._measure_angle()
+        elif self._measurement_mode == "dihedral" and len(self._picked_points) == 4:
+            self._measure_dihedral()
+
+    def _clear_measurements(self, keep_mode: bool = False) -> None:
+        for actor in self._measurement_actors:
+            try:
+                self.plotter.remove_actor(actor)
+            except Exception:
+                pass
+        for label in self._measurement_labels:
+            try:
+                self.plotter.remove_actor(label)
+            except Exception:
+                pass
+        self._measurement_actors = []
+        self._measurement_labels = []
+        self._picked_points = []
+        if not keep_mode:
+            self._measurement_mode = None
+
+    def _measure_distance(self) -> None:
+        p1, p2 = self._picked_points
+        dist = np.linalg.norm(p1 - p2)
+        line = pv.Line(p1, p2)
+        actor = self.plotter.add_mesh(line, color="#f97316", line_width=4)
+        self._measurement_actors.append(actor)
+        midpoint = (p1 + p2) / 2
+        label = self.plotter.add_point_labels(
+            [midpoint],
+            [f"{dist:.2f} Å"],
+            point_color="#f97316",
+            shape=None,
+            font_size=14,
+            text_color="#f97316",
+        )
+        self._measurement_labels.append(label)
+        self._picked_points = []
+
+    def _measure_angle(self) -> None:
+        p1, p2, p3 = self._picked_points
+        v1 = p1 - p2
+        v2 = p3 - p2
+        angle = np.degrees(np.arccos(np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))))
+        arc = pv.CircularArc(p1, p3, p2, angle=angle)
+        actor = self.plotter.add_mesh(arc, color="#3b82f6", line_width=4)
+        self._measurement_actors.append(actor)
+        label = self.plotter.add_point_labels(
+            [p2],
+            [f"{angle:.1f}°"],
+            point_color="#3b82f6",
+            shape=None,
+            font_size=14,
+            text_color="#3b82f6",
+        )
+        self._measurement_labels.append(label)
+        self._picked_points = []
+
+    def _measure_dihedral(self) -> None:
+        p1, p2, p3, p4 = self._picked_points
+        v1 = p2 - p1
+        v2 = p3 - p2
+        v3 = p4 - p3
+        n1 = np.cross(v1, v2)
+        n2 = np.cross(v2, v3)
+        n1 = n1 / np.linalg.norm(n1)
+        n2 = n2 / np.linalg.norm(n2)
+        angle = np.degrees(np.arccos(np.clip(np.dot(n1, n2), -1.0, 1.0)))
+        label = self.plotter.add_point_labels(
+            [p2],
+            [f"{angle:.1f}°"],
+            point_color="#14b8a6",
+            shape=None,
+            font_size=14,
+            text_color="#14b8a6",
+        )
+        self._measurement_labels.append(label)
+        self._picked_points = []
+
+    def update_colorbar(self, label: str, clim: tuple[float, float], cmap: str) -> None:
+        colors = (self._theme_tokens or {}).get("colors", {})
+        text = colors.get("text", "#f8fafc")
+        try:
+            from matplotlib import cm
+        except Exception:
+            self.colorbar.setText(f"{label}\n{clim[0]:.2g}–{clim[1]:.2g}")
+            return
+        height = 160
+        width = 26
+        gradient = np.linspace(0.0, 1.0, height)
+        rgba = cm.get_cmap(cmap)(gradient)
+        rgb = (rgba[:, :3] * 255).astype(np.uint8)
+        bar = np.repeat(rgb[:, None, :], max(width // 2, 6), axis=1)
+        image = QtGui.QImage(bar.data, bar.shape[1], bar.shape[0], QtGui.QImage.Format_RGB888).copy()
+        pixmap = QtGui.QPixmap.fromImage(image)
+        painter = QtGui.QPainter(pixmap)
+        painter.setPen(QtGui.QPen(QtGui.QColor(text)))
+        font = painter.font()
+        font.setPointSize(8)
+        painter.setFont(font)
+        vmin, vmax = clim
+        ticks = [
+            (0.0, vmax),
+            (0.5, (vmin + vmax) / 2),
+            (1.0, vmin),
+        ]
+        for frac, value in ticks:
+            y = int((1 - frac) * (height - 1))
+            painter.drawLine(bar.shape[1], y, bar.shape[1] + 6, y)
+            painter.drawText(bar.shape[1] + 8, y + 4, f"{value:.2g}")
+        painter.drawText(2, 12, label)
+        painter.end()
+        self.colorbar.setPixmap(pixmap)
+        self.colorbar.setMinimumWidth(width + 30)
+        self.colorbar.setToolTip(f"{label}: {clim[0]:.3g} to {clim[1]:.3g}")
+        self._apply_colorbar_style()
+
+    def cleanup(self) -> None:
+        """Close the underlying VTK render window before Qt tears down."""
+        if self._plotter_closed:
+            return
+        self.plotter.close()
+        self._plotter_closed = True
+
+    def closeEvent(self, event: QtGui.QCloseEvent) -> None:
+        self.cleanup()
+        super().closeEvent(event)
+
 
 class ElementTileWidget(QtWidgets.QFrame):
     def __init__(self, element: Element, parent: QtWidgets.QWidget | None = None) -> None:
@@ -438,269 +675,6 @@ def _element_from_mime(mime: QtCore.QMimeData) -> Element | None:
     if not symbol:
         return None
     return Element(symbol, symbol, atomic_number)
-
-    def apply_theme(self, tokens: dict) -> None:
-        self._theme_tokens = tokens
-        self._apply_colorbar_style()
-        colors = tokens["colors"]
-        try:
-            self.plotter.set_background(colors["surfaceAlt"])
-        except Exception:
-            pass
-        self._apply_bounds()
-
-    def _apply_colorbar_style(self) -> None:
-        colors = (self._theme_tokens or {}).get("colors", {})
-        bg = colors.get("surface", "#111827")
-        text = colors.get("text", "#e5e7eb")
-        border = colors.get("border", "#94a3b8")
-        self.colorbar.setStyleSheet(
-            f"background-color: {bg}; color: {text}; border: 1px solid {border}; padding: 4px;"
-        )
-
-    def _apply_bounds(self) -> None:
-        colors = (self._theme_tokens or {}).get("colors", {})
-        axis_color = colors.get("text", "#f8fafc")
-        if not self.show_bounds_axes:
-            try:
-                self.plotter.remove_bounds_axes()
-            except Exception:
-                pass
-            self._bounds_actor = None
-            return
-        try:
-            self._bounds_actor = self.plotter.show_bounds(
-                grid="front",
-                ticks="both",
-                location="outer",
-                xtitle="x (angstrom)",
-                ytitle="y (angstrom)",
-                ztitle="z (angstrom)",
-                color=axis_color,
-                bold=True,
-                font_size=12,
-                show_xlabels=True,
-                show_ylabels=True,
-                show_zlabels=True,
-                minor_ticks=True,
-            )
-            if self._bounds_actor and hasattr(self._bounds_actor, "GetCubeProperty"):
-                try:
-                    self._bounds_actor.GetCubeProperty().SetLineWidth(2.0)
-                except Exception:
-                    pass
-        except Exception:
-            pass
-
-    def set_show_bounds(self, enabled: bool) -> None:
-        self.show_bounds_axes = bool(enabled)
-        self._apply_bounds()
-
-    def dragEnterEvent(self, event: QtGui.QDragEnterEvent) -> None:
-        if event.mimeData().hasText():
-            event.acceptProposedAction()
-
-    def dragMoveEvent(self, event: QtGui.QDragMoveEvent) -> None:
-        if event.mimeData().hasText():
-            event.acceptProposedAction()
-
-    def dropEvent(self, event: QtGui.QDropEvent) -> None:
-        if event.mimeData().hasText():
-            symbol = event.mimeData().text().strip()
-            if symbol:
-                self.element_dropped.emit(symbol)
-            event.acceptProposedAction()
-
-    def reset_scene(self) -> None:
-        """Clear the scene but keep measurement tools configured."""
-        self.plotter.clear()
-        self._clear_measurements(keep_mode=True)
-        self._apply_bounds()
-        if self._measurement_mode:
-            self.plotter.enable_point_picking(
-                callback=self._on_pick,
-                left_clicking=True,
-                show_message=False,
-                use_mesh=True,
-            )
-            hint = (
-                "Measure distance: pick two points"
-                if self._measurement_mode == "distance"
-                else "Measure angle: pick three points"
-            )
-            colors = (self._theme_tokens or {}).get("colors", {})
-            text_color = colors.get("text", "white")
-            shadow = (self._theme_tokens or {}).get("meta", {}).get("mode") in ("dark", "high_contrast")
-            self.plotter.add_text(
-                hint,
-                name="measure_hint",
-                font_size=10,
-                color=text_color,
-                shadow=shadow,
-            )
-        else:
-            self.plotter.disable_picking()
-
-    def _on_pick(self, point: tuple[float, float, float]) -> None:
-        if self._measurement_mode is None:
-            return
-        self._picked_points.append(np.array(point))
-        if self._measurement_mode == "distance" and len(self._picked_points) >= 2:
-            self._render_distance()
-        elif self._measurement_mode == "angle" and len(self._picked_points) >= 3:
-            self._render_angle()
-
-    def _render_distance(self) -> None:
-        colors = (self._theme_tokens or {}).get("colors", {})
-        accent = colors.get("accent", "#93c5fd")
-        text_color = colors.get("text", "white")
-        p1, p2 = self._picked_points[:2]
-        distance = float(np.linalg.norm(p2 - p1))
-        line_actor = self.plotter.add_mesh(pv.Line(p1, p2), color=accent, line_width=4)
-        mid = (p1 + p2) / 2
-        label_actor = self.plotter.add_point_labels(
-            [mid],
-            [f"{distance:.2f} angstrom"],
-            point_size=0,
-            font_size=12,
-            text_color=text_color,
-        )
-        self._measurement_actors.append(line_actor)
-        self._measurement_labels.append(label_actor)
-        self._picked_points.clear()
-
-    def _render_angle(self) -> None:
-        colors = (self._theme_tokens or {}).get("colors", {})
-        accent = colors.get("accentHover", "#f97316")
-        text_color = colors.get("text", "white")
-        p1, p2, p3 = self._picked_points[:3]
-        v1 = p1 - p2
-        v2 = p3 - p2
-        denom = np.linalg.norm(v1) * np.linalg.norm(v2) + 1e-9
-        angle_rad = np.arccos(np.clip(np.dot(v1, v2) / denom, -1.0, 1.0))
-        angle_deg = np.degrees(angle_rad)
-        polyline = self.plotter.add_mesh(
-            pv.Spline(np.vstack([p1, p2, p3]), 50),
-            color=accent,
-            line_width=4,
-            opacity=0.85,
-        )
-        label_actor = self.plotter.add_point_labels(
-            [p2],
-            [f"{angle_deg:.1f} deg"],
-            point_size=0,
-            font_size=12,
-            text_color=text_color,
-        )
-        self._measurement_actors.append(polyline)
-        self._measurement_labels.append(label_actor)
-        self._picked_points.clear()
-
-    def _clear_measurements(self, keep_mode: bool = False) -> None:
-        for actor in self._measurement_actors:
-            self.plotter.remove_actor(actor, reset_camera=False, render=False)
-        for label in self._measurement_labels:
-            self.plotter.remove_actor(label, reset_camera=False, render=False)
-        self.plotter.remove_actor("measure_hint", reset_camera=False, render=False)
-        self._measurement_actors.clear()
-        self._measurement_labels.clear()
-        self._picked_points.clear()
-        if not keep_mode:
-            self._measurement_mode = None
-            self.plotter.disable_picking()
-
-    def start_distance_measurement(self) -> None:
-        self._clear_measurements(keep_mode=True)
-        self._measurement_mode = "distance"
-        colors = (self._theme_tokens or {}).get("colors", {})
-        text_color = colors.get("text", "white")
-        shadow = (self._theme_tokens or {}).get("meta", {}).get("mode") in ("dark", "high_contrast")
-        self.plotter.enable_point_picking(
-            callback=self._on_pick,
-            left_clicking=True,
-            show_message=False,
-            use_mesh=True,
-        )
-        self.plotter.add_text(
-            "Measure distance: pick two points",
-            name="measure_hint",
-            font_size=10,
-            color=text_color,
-            shadow=shadow,
-        )
-
-    def start_angle_measurement(self) -> None:
-        self._clear_measurements(keep_mode=True)
-        self._measurement_mode = "angle"
-        colors = (self._theme_tokens or {}).get("colors", {})
-        text_color = colors.get("text", "white")
-        shadow = (self._theme_tokens or {}).get("meta", {}).get("mode") in ("dark", "high_contrast")
-        self.plotter.enable_point_picking(
-            callback=self._on_pick,
-            left_clicking=True,
-            show_message=False,
-            use_mesh=True,
-        )
-        self.plotter.add_text(
-            "Measure angle: pick three points",
-            name="measure_hint",
-            font_size=10,
-            color=text_color,
-            shadow=shadow,
-        )
-
-    def stop_measurements(self) -> None:
-        self._clear_measurements()
-
-    def update_colorbar(self, cmap: str, clim: tuple[float, float], label: str) -> None:
-        """Render a small standalone colorbar next to the plotter."""
-        colors = (self._theme_tokens or {}).get("colors", {})
-        text = colors.get("text", "#e5e7eb")
-        try:
-            from matplotlib import cm
-        except Exception:
-            self.colorbar.setText(f"{label}\n{clim[0]:.2g}–{clim[1]:.2g}")
-            return
-        height = 160
-        width = 26
-        gradient = np.linspace(0.0, 1.0, height)
-        rgba = cm.get_cmap(cmap)(gradient)
-        rgb = (rgba[:, :3] * 255).astype(np.uint8)
-        bar = np.repeat(rgb[:, None, :], max(width // 2, 6), axis=1)
-        image = QtGui.QImage(bar.data, bar.shape[1], bar.shape[0], QtGui.QImage.Format_RGB888).copy()
-        pixmap = QtGui.QPixmap.fromImage(image)
-        painter = QtGui.QPainter(pixmap)
-        painter.setPen(QtGui.QPen(QtGui.QColor(text)))
-        font = painter.font()
-        font.setPointSize(8)
-        painter.setFont(font)
-        vmin, vmax = clim
-        ticks = [
-            (0.0, vmax),
-            (0.5, (vmin + vmax) / 2),
-            (1.0, vmin),
-        ]
-        for frac, value in ticks:
-            y = int((1 - frac) * (height - 1))
-            painter.drawLine(bar.shape[1], y, bar.shape[1] + 6, y)
-            painter.drawText(bar.shape[1] + 8, y + 4, f"{value:.2g}")
-        painter.drawText(2, 12, label)
-        painter.end()
-        self.colorbar.setPixmap(pixmap)
-        self.colorbar.setMinimumWidth(width + 30)
-        self.colorbar.setToolTip(f"{label}: {clim[0]:.3g} to {clim[1]:.3g}")
-        self._apply_colorbar_style()
-
-    def cleanup(self) -> None:
-        """Close the underlying VTK render window before Qt tears down."""
-        if self._plotter_closed:
-            return
-        self.plotter.close()
-        self._plotter_closed = True
-
-    def closeEvent(self, event: QtGui.QCloseEvent) -> None:
-        self.cleanup()
-        super().closeEvent(event)
 
 
 class CollapsibleGroup(QtWidgets.QGroupBox):
