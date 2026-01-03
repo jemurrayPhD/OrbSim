@@ -770,10 +770,6 @@ class CraftingTableSlotWidget(QtWidgets.QFrame):
         font.setPointSize(font.pointSize() + 6)
         font.setBold(True)
         self.symbol_label.setFont(font)
-        number_font = self.number_label.font()
-        number_font.setPointSize(max(number_font.pointSize() - 2, 7))
-        number_font.setBold(False)
-        self.number_label.setFont(number_font)
 
     def set_element(self, atomic_number: int, symbol: str, count: int = 1) -> None:
         self.atomic_number = atomic_number
