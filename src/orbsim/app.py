@@ -32,7 +32,7 @@ from orbsim.orbitals import (
 from periodic_table_cli.cli import ChartConfig, DataConfig, load_data
 from periodic_table_cli.chart_processor import ChartProcessor
 from periodic_table_cli.data_processor import DataProcessor
-from orbsim.widgets import CollapsibleGroup, DropPlotter
+from orbsim.widgets import CollapsibleGroup, DropPlotter, PeriodicTableWidget
 from orbsim.theming.apply_theme import apply_theme
 from orbsim.theming.theme_tokens import THEME_TOKENS, get_theme_tokens
 
@@ -4082,11 +4082,10 @@ class OrbSimWindow(QtWidgets.QMainWindow):
             apply_theme(app, tokens)
         for tab_index in range(self.tabs.count()):
             tab = self.tabs.widget(tab_index)
-            for widget in tab.findChildren((DropPlotter,)):
+            for widget in tab.findChildren(DropPlotter):
                 widget.apply_theme(tokens)
-            for widget in tab.findChildren(QtWidgets.QTableWidget):
-                if hasattr(widget, "apply_theme"):
-                    widget.apply_theme(tokens)
+            for widget in tab.findChildren(PeriodicTableWidget):
+                widget.apply_theme(tokens)
         self._refresh_annotation_layers()
 
     def _grab_current_view(self) -> QtGui.QPixmap:
