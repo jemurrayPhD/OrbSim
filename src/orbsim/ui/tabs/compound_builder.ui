@@ -31,11 +31,15 @@
    <item>
     <layout class="QHBoxLayout" name="upperLayout">
      <item>
-      <widget class="QGroupBox" name="craftingGroup">
-       <property name="title">
-        <string>Crafting</string>
-       </property>
-       <layout class="QVBoxLayout" name="craftingLayout">
+      <widget class="QWidget" name="craftingSection">
+       <layout class="QVBoxLayout" name="craftingSectionLayout">
+        <item>
+         <widget class="QLabel" name="craftingHeaderLabel">
+          <property name="text">
+           <string>Crafting</string>
+          </property>
+         </widget>
+        </item>
         <item>
          <widget class="QWidget" name="craftingPlaceholder"/>
         </item>
@@ -50,17 +54,35 @@
       </widget>
      </item>
      <item>
-      <widget class="QGroupBox" name="recipeGroup">
-       <property name="title">
-        <string>Recipe guide</string>
-       </property>
-       <layout class="QVBoxLayout" name="recipeLayout">
+      <widget class="QWidget" name="recipeSection">
+       <layout class="QVBoxLayout" name="recipeSectionLayout">
         <item>
-         <widget class="QCheckBox" name="ignoreCountsCheckBox">
+         <widget class="QLabel" name="recipeHeaderLabel">
           <property name="text">
-           <string>Ignore counts (match element types only)</string>
+           <string>Recipe guide</string>
           </property>
          </widget>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="recipeModeLayout">
+          <item>
+           <widget class="QRadioButton" name="compatibleRadio">
+            <property name="text">
+             <string>Compatible (respect counts)</string>
+            </property>
+            <property name="checked">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QRadioButton" name="onlyElementsRadio">
+            <property name="text">
+             <string>Only these elements (ignore counts)</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
         </item>
         <item>
          <widget class="QLineEdit" name="recipeSearchLineEdit">
@@ -100,11 +122,15 @@
       </widget>
      </item>
      <item>
-      <widget class="QGroupBox" name="dataGroup">
-       <property name="title">
-        <string>Compound Data</string>
-       </property>
-       <layout class="QVBoxLayout" name="dataLayout">
+      <widget class="QWidget" name="dataSection">
+       <layout class="QVBoxLayout" name="dataSectionLayout">
+        <item>
+         <widget class="QLabel" name="dataHeaderLabel">
+          <property name="text">
+           <string>Compound Data</string>
+          </property>
+         </widget>
+        </item>
         <item>
          <widget class="QWidget" name="dataPlaceholder"/>
         </item>
@@ -114,36 +140,17 @@
     </layout>
    </item>
    <item>
-    <widget class="QGroupBox" name="inventoryGroup">
-     <property name="title">
-      <string>Periodic Table Inventory</string>
-     </property>
-     <layout class="QVBoxLayout" name="inventoryLayout">
+    <widget class="QWidget" name="inventorySection">
+     <layout class="QVBoxLayout" name="inventorySectionLayout">
+      <item>
+       <widget class="QLabel" name="inventoryHeaderLabel">
+        <property name="text">
+         <string>Periodic Table Inventory</string>
+        </property>
+       </widget>
+      </item>
       <item>
        <widget class="QWidget" name="inventoryPlaceholder"/>
-      </item>
-     </layout>
-    </widget>
-   </item>
-   <item>
-    <widget class="QFrame" name="citationFrame">
-     <layout class="QHBoxLayout" name="citationLayout">
-      <item>
-       <widget class="QLabel" name="citationLabel">
-        <property name="text">
-         <string>Compound data from PubChem (NIH/NLM). Cite: PubChem Citation Guidelines. https://pubchem.ncbi.nlm.nih.gov/docs/citation-guidelines</string>
-        </property>
-        <property name="wordWrap">
-         <bool>true</bool>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="openCitationButton">
-        <property name="text">
-         <string>Open source page</string>
-        </property>
-       </widget>
       </item>
      </layout>
     </widget>

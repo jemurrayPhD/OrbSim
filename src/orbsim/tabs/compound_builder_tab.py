@@ -3,16 +3,13 @@ from __future__ import annotations
 from pathlib import Path
 import sys
 
-from PySide6 import QtCore, QtGui, QtWidgets
+from PySide6 import QtCore, QtWidgets
 
 from orbsim.chem.compound_db import db_exists, get_compound_details, get_db_path, query_compounds_by_elements
 from orbsim.chem.elements import ATOMIC_NUMBER_TO_SYMBOL, SYMBOL_TO_ELEMENT
 from orbsim.chem.formula_parser import parse_formula
 from orbsim.ui.generated.ui_compound_builder import Ui_CompoundBuilderTab
 from orbsim.widgets import CraftingTableWidget, CompoundPreviewPane, PeriodicTableInventoryWidget
-
-
-PUBCHEM_CITATION_URL = "https://pubchem.ncbi.nlm.nih.gov/docs/citation-guidelines"
 
 
 class CompoundBuilderTab(QtWidgets.QWidget):
@@ -43,10 +40,15 @@ class CompoundBuilderTab(QtWidgets.QWidget):
         self.ui.dataLayout.replaceWidget(self.ui.dataPlaceholder, self.preview_scroll)
         self.ui.dataPlaceholder.deleteLater()
 
-        self.ui.craftingGroup.setMinimumSize(320, 320)
-        self.ui.recipeGroup.setMinimumSize(320, 320)
-        self.ui.dataGroup.setMinimumSize(360, 320)
-        self.ui.inventoryGroup.setMinimumHeight(260)
+        self.ui.craftingSection.setMinimumSize(320, 320)
+        self.ui.recipeSection.setMinimumSize(380, 320)
+        self.ui.dataSection.setMinimumSize(320, 320)
+        self.ui.dataSection.setMaximumWidth(520)
+        self.preview_scroll.setMaximumWidth(520)
+        self.ui.inventorySection.setMinimumHeight(260)
+        self.ui.upperLayout.setStretch(0, 2)
+        self.ui.upperLayout.setStretch(1, 4)
+        self.ui.upperLayout.setStretch(2, 3)
 
         self._update_timer = QtCore.QTimer(self)
         self._update_timer.setSingleShot(True)
@@ -57,18 +59,13 @@ class CompoundBuilderTab(QtWidgets.QWidget):
         self.ui.clearButton.clicked.connect(self._clear_crafting)
         self.ui.formulaLineEdit.returnPressed.connect(self._apply_formula)
         self.ui.recipeSearchLineEdit.textChanged.connect(self._queue_refresh)
-        self.ui.ignoreCountsCheckBox.toggled.connect(self._queue_refresh)
+        self.ui.compatibleRadio.toggled.connect(self._queue_refresh)
+        self.ui.onlyElementsRadio.toggled.connect(self._queue_refresh)
         self.crafting_grid.crafting_changed.connect(self._on_crafting_changed)
         self.ui.recipeListWidget.itemSelectionChanged.connect(self._select_compound)
-        self.ui.openCitationButton.clicked.connect(self._open_citation_page)
         self.ui.buildDbButton.clicked.connect(self._start_build)
         self.inventory_widget.element_clicked.connect(self._add_element_from_inventory)
 
-        self.ui.citationLabel.setOpenExternalLinks(True)
-        self.ui.citationLabel.setText(
-            "Compound data from PubChem (NIH/NLM). "
-            f"Cite: <a href=\"{PUBCHEM_CITATION_URL}\">PubChem Citation Guidelines</a>."
-        )
         self.ui.buildProgressBar.setRange(0, 1)
         self._update_db_state()
 
@@ -78,14 +75,12 @@ class CompoundBuilderTab(QtWidgets.QWidget):
         radii = tokens["radii"]
         font = tokens["font"]
         self.setStyleSheet(
-            "QGroupBox {"
-            f"border: 1px solid {colors['border']};"
-            f"border-radius: {radii['sm']}px;"
-            f"margin-top: {radii['sm']}px;"
-            "}"
-            "QGroupBox::title {"
-            f"color: {colors['text']};"
-            f"padding: 0 {radii['sm']}px;"
+            "QLabel#craftingHeaderLabel, QLabel#recipeHeaderLabel, "
+            "QLabel#dataHeaderLabel, QLabel#inventoryHeaderLabel {"
+            f"color: {colors['textMuted']};"
+            "font-weight: 600;"
+            f"font-size: {font['titleSize']}px;"
+            f"padding-bottom: {tokens['spacing']['xs']}px;"
             "}"
             "QLineEdit, QListWidget {"
             f"background: {colors['surface']};"
@@ -93,7 +88,7 @@ class CompoundBuilderTab(QtWidgets.QWidget):
             f"border: 1px solid {colors['border']};"
             f"border-radius: {radii['sm']}px;"
             "}"
-            "QPushButton, QCheckBox {"
+            "QPushButton, QCheckBox, QRadioButton {"
             f"color: {colors['text']};"
             "}"
             "QPushButton {"
@@ -113,15 +108,6 @@ class CompoundBuilderTab(QtWidgets.QWidget):
         self.preview_scroll.setStyleSheet(
             f"background: {colors['surface']}; border: 1px solid {colors['border']};"
         )
-        self.ui.citationFrame.setStyleSheet(
-            f"background: {colors['surfaceAlt']};"
-            f"border: 1px solid {colors['border']};"
-            f"border-radius: {radii['sm']}px;"
-        )
-        citation_font = self.ui.citationLabel.font()
-        citation_font.setPointSize(font["baseSize"])
-        self.ui.citationLabel.setFont(citation_font)
-
     def _queue_refresh(self) -> None:
         if self._db_ready:
             self._update_timer.start()
@@ -181,8 +167,8 @@ class CompoundBuilderTab(QtWidgets.QWidget):
         if not self._db_ready:
             return
         required_counts = self.crafting_grid.counts()
-        ignore_counts = self.ui.ignoreCountsCheckBox.isChecked()
-        results = query_compounds_by_elements(required_counts, ignore_counts=ignore_counts)
+        only_elements = self.ui.onlyElementsRadio.isChecked()
+        results = query_compounds_by_elements(required_counts, only_elements=only_elements)
         search = self.ui.recipeSearchLineEdit.text().strip().lower()
         if search:
             results = [
@@ -213,14 +199,12 @@ class CompoundBuilderTab(QtWidgets.QWidget):
         compound = get_compound_details(int(cid))
         self.preview_pane.set_compound(compound)
 
-    def _open_citation_page(self) -> None:
-        QtGui.QDesktopServices.openUrl(QtCore.QUrl(PUBCHEM_CITATION_URL))
-
     def _update_db_state(self) -> None:
         self._db_ready = db_exists()
         self.ui.recipeSearchLineEdit.setEnabled(self._db_ready)
         self.ui.recipeListWidget.setEnabled(self._db_ready)
-        self.ui.ignoreCountsCheckBox.setEnabled(self._db_ready)
+        self.ui.compatibleRadio.setEnabled(self._db_ready)
+        self.ui.onlyElementsRadio.setEnabled(self._db_ready)
         self.ui.buildDbButton.setVisible(not self._db_ready)
         self.ui.buildProgressBar.setVisible(False)
         if self._db_ready:

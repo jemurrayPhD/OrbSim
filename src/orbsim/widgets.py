@@ -436,10 +436,9 @@ class ElementTileWidget(QtWidgets.QFrame):
         self.symbol_label = QtWidgets.QLabel(element.symbol)
         self.symbol_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.name_label = QtWidgets.QLabel(element.name)
-        self.name_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignBottom)
-        layout.addWidget(self.number_label, 0, 0, 1, 1)
-        layout.addWidget(self.symbol_label, 1, 0, 1, 2)
-        layout.addWidget(self.name_label, 2, 0, 1, 2)
+        self.name_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.symbol_label, 0, 0, 1, 2)
+        layout.addWidget(self.name_label, 1, 0, 1, 2)
 
     def apply_theme(self, tokens: dict) -> None:
         self._theme_tokens = tokens
@@ -460,10 +459,8 @@ class ElementTileWidget(QtWidgets.QFrame):
         font.setBold(True)
         font.setPointSize(font.pointSize() + 4)
         self.symbol_label.setFont(font)
-        number_font = self.number_label.font()
-        number_font.setPointSize(max(number_font.pointSize() - 1, 7))
-        self.number_label.setFont(number_font)
         name_font = self.name_label.font()
+        name_font.setBold(False)
         name_font.setPointSize(max(name_font.pointSize() - 2, 7))
         self.name_label.setFont(name_font)
 
@@ -1262,7 +1259,7 @@ class StructureDiagramWidget(QtWidgets.QLabel):
         self._network.finished.connect(self._on_image_reply)
         self._pending_reply: QtNetwork.QNetworkReply | None = None
         self._cid: int | None = None
-        self.setMinimumHeight(280)
+        self.setFixedHeight(240)
         self.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
 
     def apply_theme(self, tokens: dict) -> None:
@@ -1387,11 +1384,10 @@ class CompoundPreviewPane(QtWidgets.QWidget):
         header_layout.addWidget(self.pubchem_button)
         layout.addLayout(header_layout)
 
-        self.citation_label = QtWidgets.QLabel(
-            "Data source: PubChem (NIH/NLM). Citation guidelines available at pubchem.ncbi.nlm.nih.gov/docs/citation-guidelines."
-        )
-        self.citation_label.setWordWrap(True)
-        layout.addWidget(self.citation_label)
+        self.source_label = QtWidgets.QLabel("Source: PubChem")
+        self.source_label.setOpenExternalLinks(True)
+        self.source_label.setText('<a href="https://pubchem.ncbi.nlm.nih.gov/docs/citation-guidelines">Source: PubChem</a>')
+        header_layout.addWidget(self.source_label)
 
         self.structure_widget = StructureDiagramWidget(self)
         layout.addWidget(self.structure_widget)
@@ -1429,7 +1425,9 @@ class CompoundPreviewPane(QtWidgets.QWidget):
             self._populate_table(self.oxidation_table, [])
             self._populate_table(self.properties_table, [])
             return
-        self.name_label.setText(f"{compound['name']} ({compound['formula']})")
+        raw_name = compound.get("name") or ""
+        name = raw_name.split(";")[0].strip()
+        self.name_label.setText(f"{name} ({compound['formula']})")
         self._pubchem_url = compound.get("pubchem_url")
         self.structure_widget.set_cid(compound.get("cid"))
         oxidation_states, heuristic = estimate_oxidation_states(compound)
@@ -1455,11 +1453,10 @@ class CompoundPreviewPane(QtWidgets.QWidget):
         if compound.get("mol_weight"):
             rows.append(("Molecular weight", str(compound["mol_weight"])))
         if compound.get("iupac_name"):
-            rows.append(("IUPAC name", compound["iupac_name"]))
+            iupac = str(compound["iupac_name"]).split(";")[0].strip()
+            rows.append(("IUPAC name", iupac))
         if compound.get("smiles"):
             rows.append(("SMILES", compound["smiles"]))
-        if compound.get("inchikey"):
-            rows.append(("InChIKey", compound["inchikey"]))
         self._populate_table(self.properties_table, rows)
 
     def _populate_table(self, table: QtWidgets.QTableWidget, rows: list[tuple[str, str]]) -> None:
