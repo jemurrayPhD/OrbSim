@@ -18,6 +18,15 @@ pip install -r requirements.txt
 orbsim
 ```
 
+## UI development
+Qt Designer `.ui` files live in `src/orbsim/ui/` and are compiled into Python bindings under
+`src/orbsim/ui/generated/`. The generated files are committed so the app can run without
+`pyside6-uic` installed. When editing the `.ui` files locally, regenerate the bindings with:
+
+```bash
+python tools/build_ui.py
+```
+
 ## Notes
 This prototype focuses on interaction and visualization scaffolding. Orbital physics and
 energy minimization are simplified to keep the UI responsive and extensible.

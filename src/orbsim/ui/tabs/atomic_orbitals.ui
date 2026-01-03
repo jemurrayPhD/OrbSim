@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>AtomicOrbitalsTab</class>
+ <widget class="QWidget" name="AtomicOrbitalsTab">
+  <layout class="QHBoxLayout" name="rootLayout">
+   <item>
+    <widget class="DropPlotter" name="plotterFrame"/>
+   </item>
+   <item>
+    <widget class="QWidget" name="sliceContainer"/>
+   </item>
+   <item>
+    <widget class="QScrollArea" name="controlsScroll">
+     <property name="widgetResizable">
+      <bool>true</bool>
+     </property>
+     <widget class="QWidget" name="controlsScrollContents"/>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>DropPlotter</class>
+   <extends>QFrame</extends>
+   <header>orbsim.widgets</header>
+  </customwidget>
+ </customwidgets>
+ <resources/>
+ <connections/>
+</ui>
