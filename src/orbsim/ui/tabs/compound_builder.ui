@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>CompoundBuilderTab</class>
+ <widget class="QWidget" name="CompoundBuilderTab">
+  <layout class="QVBoxLayout" name="rootLayout">
+   <item>
+    <layout class="QHBoxLayout" name="formulaLayout">
+     <item>
+      <widget class="QLineEdit" name="formulaLineEdit">
+       <property name="placeholderText">
+        <string>Type formula, e.g. H2O</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="addFormulaButton">
+       <property name="text">
+        <string>Add</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="clearButton">
+       <property name="text">
+        <string>Clear</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="upperLayout">
+     <item>
+      <widget class="QWidget" name="craftingSection">
+       <layout class="QVBoxLayout" name="craftingLayout">
+        <item>
+         <widget class="QLabel" name="craftingHeaderLabel">
+          <property name="text">
+           <string>Crafting</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QWidget" name="craftingPlaceholder"/>
+        </item>
+        <item>
+         <widget class="QLabel" name="currentElementsLabel">
+          <property name="text">
+           <string>Current elements: (none)</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </item>
+     <item>
+      <widget class="QWidget" name="recipeSection">
+       <layout class="QVBoxLayout" name="recipeLayout">
+        <item>
+         <widget class="QLabel" name="recipeHeaderLabel">
+          <property name="text">
+           <string>Recipe guide</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="recipeModeLayout">
+          <item>
+           <widget class="QRadioButton" name="compatibleRadio">
+            <property name="text">
+             <string>Compatible (respect counts)</string>
+            </property>
+            <property name="checked">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QRadioButton" name="onlyElementsRadio">
+            <property name="text">
+             <string>Only these elements (ignore counts)</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <widget class="QLineEdit" name="recipeSearchLineEdit">
+          <property name="placeholderText">
+           <string>Filter recipes (optional)</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QListWidget" name="recipeListWidget"/>
+        </item>
+        <item>
+         <widget class="QLabel" name="dbStatusLabel">
+          <property name="text">
+           <string>DB status: unknown</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="buildDbButton">
+          <property name="text">
+           <string>Build database (PubChem)</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QProgressBar" name="buildProgressBar">
+          <property name="value">
+           <number>0</number>
+          </property>
+          <property name="textVisible">
+           <bool>false</bool>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </item>
+     <item>
+      <widget class="QWidget" name="dataSection">
+       <layout class="QVBoxLayout" name="dataLayout">
+        <item>
+         <widget class="QLabel" name="dataHeaderLabel">
+          <property name="text">
+           <string>Compound Data</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QWidget" name="dataPlaceholder"/>
+        </item>
+       </layout>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QWidget" name="inventorySection">
+     <layout class="QVBoxLayout" name="inventoryLayout">
+      <item>
+       <widget class="QLabel" name="inventoryHeaderLabel">
+        <property name="text">
+         <string>Periodic Table Inventory</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QWidget" name="inventoryPlaceholder"/>
+      </item>
+     </layout>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
