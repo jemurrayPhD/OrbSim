@@ -431,14 +431,12 @@ class ElementTileWidget(QtWidgets.QFrame):
         layout = QtWidgets.QGridLayout(self)
         layout.setContentsMargins(6, 6, 6, 6)
         layout.setSpacing(2)
-        self.number_label = QtWidgets.QLabel(str(element.atomic_number))
-        self.number_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignTop)
         self.symbol_label = QtWidgets.QLabel(element.symbol)
         self.symbol_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        self.name_label = QtWidgets.QLabel(element.name)
-        self.name_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.number_label = QtWidgets.QLabel(str(element.atomic_number))
+        self.number_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.symbol_label, 0, 0, 1, 2)
-        layout.addWidget(self.name_label, 1, 0, 1, 2)
+        layout.addWidget(self.number_label, 1, 0, 1, 2)
 
     def apply_theme(self, tokens: dict) -> None:
         self._theme_tokens = tokens
@@ -459,10 +457,10 @@ class ElementTileWidget(QtWidgets.QFrame):
         font.setBold(True)
         font.setPointSize(font.pointSize() + 4)
         self.symbol_label.setFont(font)
-        name_font = self.name_label.font()
-        name_font.setBold(False)
-        name_font.setPointSize(max(name_font.pointSize() - 2, 7))
-        self.name_label.setFont(name_font)
+        number_font = self.number_label.font()
+        number_font.setPointSize(max(number_font.pointSize() - 2, 7))
+        number_font.setBold(False)
+        self.number_label.setFont(number_font)
 
     def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:
         if event.button() == QtCore.Qt.MouseButton.LeftButton:
@@ -772,6 +770,10 @@ class CraftingTableSlotWidget(QtWidgets.QFrame):
         font.setPointSize(font.pointSize() + 6)
         font.setBold(True)
         self.symbol_label.setFont(font)
+        number_font = self.number_label.font()
+        number_font.setPointSize(max(number_font.pointSize() - 2, 7))
+        number_font.setBold(False)
+        self.number_label.setFont(number_font)
 
     def set_element(self, atomic_number: int, symbol: str, count: int = 1) -> None:
         self.atomic_number = atomic_number
@@ -1376,9 +1378,6 @@ class CompoundPreviewPane(QtWidgets.QWidget):
         layout.setSpacing(8)
 
         header_layout = QtWidgets.QHBoxLayout()
-        self.name_label = QtWidgets.QLabel("Select a compound")
-        self.name_label.setWordWrap(True)
-        header_layout.addWidget(self.name_label, 1)
         self.pubchem_button = QtWidgets.QPushButton("Open PubChem")
         self.pubchem_button.clicked.connect(self._open_pubchem)
         header_layout.addWidget(self.pubchem_button)
@@ -1418,7 +1417,6 @@ class CompoundPreviewPane(QtWidgets.QWidget):
 
     def set_compound(self, compound: dict | None) -> None:
         if not compound:
-            self.name_label.setText("Select a compound")
             self._pubchem_url = None
             self.structure_widget.set_cid(None)
             self.bonding_widget.set_bonding("Bonding: —", "Polarity: —")
@@ -1427,7 +1425,6 @@ class CompoundPreviewPane(QtWidgets.QWidget):
             return
         raw_name = compound.get("name") or ""
         name = raw_name.split(";")[0].strip()
-        self.name_label.setText(f"{name} ({compound['formula']})")
         self._pubchem_url = compound.get("pubchem_url")
         self.structure_widget.set_cid(compound.get("cid"))
         oxidation_states, heuristic = estimate_oxidation_states(compound)

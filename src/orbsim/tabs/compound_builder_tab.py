@@ -108,6 +108,7 @@ class CompoundBuilderTab(QtWidgets.QWidget):
         self.preview_scroll.setStyleSheet(
             f"background: {colors['surface']}; border: 1px solid {colors['border']};"
         )
+
     def _queue_refresh(self) -> None:
         if self._db_ready:
             self._update_timer.start()

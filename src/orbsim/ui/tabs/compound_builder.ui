@@ -32,7 +32,7 @@
     <layout class="QHBoxLayout" name="upperLayout">
      <item>
       <widget class="QWidget" name="craftingSection">
-       <layout class="QVBoxLayout" name="craftingSectionLayout">
+       <layout class="QVBoxLayout" name="craftingLayout">
         <item>
          <widget class="QLabel" name="craftingHeaderLabel">
           <property name="text">
@@ -55,7 +55,7 @@
      </item>
      <item>
       <widget class="QWidget" name="recipeSection">
-       <layout class="QVBoxLayout" name="recipeSectionLayout">
+       <layout class="QVBoxLayout" name="recipeLayout">
         <item>
          <widget class="QLabel" name="recipeHeaderLabel">
           <property name="text">
@@ -123,7 +123,7 @@
      </item>
      <item>
       <widget class="QWidget" name="dataSection">
-       <layout class="QVBoxLayout" name="dataSectionLayout">
+       <layout class="QVBoxLayout" name="dataLayout">
         <item>
          <widget class="QLabel" name="dataHeaderLabel">
           <property name="text">
@@ -141,7 +141,7 @@
    </item>
    <item>
     <widget class="QWidget" name="inventorySection">
-     <layout class="QVBoxLayout" name="inventorySectionLayout">
+     <layout class="QVBoxLayout" name="inventoryLayout">
       <item>
        <widget class="QLabel" name="inventoryHeaderLabel">
         <property name="text">
