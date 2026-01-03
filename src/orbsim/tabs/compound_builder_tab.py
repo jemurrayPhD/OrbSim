@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from collections import Counter
+from pathlib import Path
+import sys
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from orbsim.chem.compound_db import get_compound_details, query_compounds_by_elements
+from orbsim.chem.compound_db import db_exists, get_compound_details, get_db_path, query_compounds_by_elements
 from orbsim.chem.elements import ATOMIC_NUMBER_TO_SYMBOL
 from orbsim.chem.formula_parser import expand_formula_to_atomic_numbers, parse_formula
 from orbsim.dialogs.compound_details_dialog import CompoundDetailsDialog
@@ -22,6 +24,11 @@ class CompoundBuilderTab(QtWidgets.QWidget):
         self.ui.setupUi(self)
 
         self._theme_tokens: dict | None = None
+        self._db_ready = False
+        self._builder_process: QtCore.QProcess | None = None
+        self._build_stdout: list[str] = []
+        self._build_stderr: list[str] = []
+
         self.inventory_widget = InventoryPeriodicTableWidget(self)
         self.crafting_grid = CraftingGridWidget(self)
 
@@ -43,12 +50,15 @@ class CompoundBuilderTab(QtWidgets.QWidget):
         self.crafting_grid.changed.connect(self._on_crafting_changed)
         self.ui.recipeListWidget.itemActivated.connect(self._open_compound_dialog)
         self.ui.openCitationButton.clicked.connect(self._open_citation_page)
+        self.ui.buildDbButton.clicked.connect(self._start_build)
 
         self.ui.citationLabel.setOpenExternalLinks(True)
         self.ui.citationLabel.setText(
             "Compound data from PubChem (NIH/NLM). "
             f"Cite: <a href=\"{PUBCHEM_CITATION_URL}\">PubChem Citation Guidelines</a>."
         )
+        self.ui.buildProgressBar.setRange(0, 1)
+        self._update_db_state()
 
     def apply_theme(self, tokens: dict) -> None:
         self._theme_tokens = tokens
@@ -95,7 +105,8 @@ class CompoundBuilderTab(QtWidgets.QWidget):
         self.ui.citationLabel.setFont(citation_font)
 
     def _queue_refresh(self) -> None:
-        self._update_timer.start()
+        if self._db_ready:
+            self._update_timer.start()
 
     def _on_crafting_changed(self) -> None:
         self._update_current_elements_label()
@@ -140,8 +151,18 @@ class CompoundBuilderTab(QtWidgets.QWidget):
         self._on_crafting_changed()
 
     def _refresh_recipe_list(self) -> None:
+        if not self._db_ready:
+            return
         elements = self.crafting_grid.get_elements()
-        search = self.ui.recipeSearchLineEdit.text().strip() or None
+        required_counts = Counter(elements)
+        results = query_compounds_by_elements(required_counts)
+        search = self.ui.recipeSearchLineEdit.text().strip().lower()
+        if search:
+            results = [
+                item
+                for item in results
+                if search in (item["name"] or "").lower() or search in (item["formula"] or "").lower()
+            ]
         formula = None
         if self._active_formula:
             try:
@@ -149,7 +170,8 @@ class CompoundBuilderTab(QtWidgets.QWidget):
                 formula = self._active_formula
             except ValueError:
                 formula = None
-        results = query_compounds_by_elements(elements, formula=formula, search=search)
+        if formula:
+            results.sort(key=lambda item: (0 if (item["formula"] or "").lower() == formula.lower() else 1))
         self.ui.recipeListWidget.clear()
         if not results:
             item = QtWidgets.QListWidgetItem("No matching compounds found.")
@@ -160,7 +182,7 @@ class CompoundBuilderTab(QtWidgets.QWidget):
             label = f"{result['name']} — {result['formula']}"
             item = QtWidgets.QListWidgetItem(label)
             item.setData(QtCore.Qt.ItemDataRole.UserRole, result["cid"])
-            if result["exact_formula"] and self._theme_tokens:
+            if formula and (result["formula"] or "").lower() == formula.lower() and self._theme_tokens:
                 item.setForeground(QtGui.QColor(self._theme_tokens["colors"]["accent"]))
             self.ui.recipeListWidget.addItem(item)
 
@@ -177,3 +199,70 @@ class CompoundBuilderTab(QtWidgets.QWidget):
 
     def _open_citation_page(self) -> None:
         QtGui.QDesktopServices.openUrl(QtCore.QUrl(PUBCHEM_CITATION_URL))
+
+    def _update_db_state(self) -> None:
+        self._db_ready = db_exists()
+        self.ui.recipeSearchLineEdit.setEnabled(self._db_ready)
+        self.ui.recipeListWidget.setEnabled(self._db_ready)
+        self.ui.buildDbButton.setVisible(not self._db_ready)
+        self.ui.buildProgressBar.setVisible(False)
+        if self._db_ready:
+            self.ui.dbStatusLabel.setText("DB status: ready")
+            self._refresh_recipe_list()
+        else:
+            self.ui.dbStatusLabel.setText("DB status: not built")
+            self.ui.recipeListWidget.clear()
+
+    def _start_build(self) -> None:
+        if self._builder_process and self._builder_process.state() != QtCore.QProcess.NotRunning:
+            return
+        self._build_stdout.clear()
+        self._build_stderr.clear()
+        seed_path = Path(__file__).resolve().parents[3] / "tools" / "seed_compounds.csv"
+        db_path = get_db_path()
+        process = QtCore.QProcess(self)
+        process.setProgram(sys.executable)
+        process.setArguments(
+            [
+                "-m",
+                "tools.build_compound_db",
+                "--seed",
+                str(seed_path),
+                "--out",
+                str(db_path),
+            ]
+        )
+        process.setProcessChannelMode(QtCore.QProcess.SeparateChannels)
+        process.readyReadStandardOutput.connect(lambda: self._read_process_output(process))
+        process.readyReadStandardError.connect(lambda: self._read_process_error(process))
+        process.finished.connect(self._on_build_finished)
+        process.start()
+        self._builder_process = process
+        self.ui.buildDbButton.setEnabled(False)
+        self.ui.buildProgressBar.setVisible(True)
+        self.ui.buildProgressBar.setRange(0, 0)
+        self.ui.dbStatusLabel.setText("DB status: building…")
+
+    def _read_process_output(self, process: QtCore.QProcess) -> None:
+        text = bytes(process.readAllStandardOutput()).decode("utf-8", errors="ignore")
+        if text:
+            self._build_stdout.append(text)
+
+    def _read_process_error(self, process: QtCore.QProcess) -> None:
+        text = bytes(process.readAllStandardError()).decode("utf-8", errors="ignore")
+        if text:
+            self._build_stderr.append(text)
+
+    def _on_build_finished(self, exit_code: int, status: QtCore.QProcess.ExitStatus) -> None:
+        self.ui.buildProgressBar.setVisible(False)
+        self.ui.buildDbButton.setEnabled(True)
+        success = exit_code == 0 and status == QtCore.QProcess.NormalExit and db_exists()
+        if success:
+            self.ui.dbStatusLabel.setText("DB status: ready")
+            self._update_db_state()
+            return
+        stderr = "".join(self._build_stderr).strip()
+        stdout = "".join(self._build_stdout).strip()
+        details = stderr or stdout or "Unknown error while building the database."
+        QtWidgets.QMessageBox.critical(self, "Database build failed", details)
+        self.ui.dbStatusLabel.setText("DB status: not built")

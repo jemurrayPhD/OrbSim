@@ -77,6 +77,30 @@
         <item>
          <widget class="QListWidget" name="recipeListWidget"/>
         </item>
+        <item>
+         <widget class="QLabel" name="dbStatusLabel">
+          <property name="text">
+           <string>DB status: unknown</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="buildDbButton">
+          <property name="text">
+           <string>Build database (PubChem)</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QProgressBar" name="buildProgressBar">
+          <property name="value">
+           <number>0</number>
+          </property>
+          <property name="textVisible">
+           <bool>false</bool>
+          </property>
+         </widget>
+        </item>
        </layout>
       </widget>
      </item>

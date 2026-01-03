@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import sqlite3
 import sys
@@ -16,68 +17,6 @@ from orbsim.chem.formula_parser import parse_formula
 
 
 PUBCHEM_BASE = "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
-PUBCHEM_CITATION_URL = "https://pubchem.ncbi.nlm.nih.gov/docs/citation-guidelines"
-
-SEED_COMPOUNDS = [
-    "water",
-    "hydrogen peroxide",
-    "carbon dioxide",
-    "carbon monoxide",
-    "methane",
-    "ethane",
-    "propane",
-    "butane",
-    "ethanol",
-    "methanol",
-    "glucose",
-    "sucrose",
-    "sodium chloride",
-    "potassium chloride",
-    "ammonia",
-    "nitric acid",
-    "sulfuric acid",
-    "hydrochloric acid",
-    "phosphoric acid",
-    "calcium carbonate",
-    "sodium bicarbonate",
-    "calcium hydroxide",
-    "sodium hydroxide",
-    "magnesium sulfate",
-    "copper sulfate",
-    "iron(iii) oxide",
-    "iron(ii) oxide",
-    "aluminum oxide",
-    "silicon dioxide",
-    "sodium nitrate",
-    "potassium nitrate",
-    "sodium sulfate",
-    "ammonium chloride",
-    "ammonium nitrate",
-    "acetic acid",
-    "formic acid",
-    "citric acid",
-    "urea",
-    "benzene",
-    "toluene",
-    "phenol",
-    "acetone",
-    "formaldehyde",
-    "glycine",
-    "alanine",
-    "sodium hypochlorite",
-    "calcium chloride",
-    "magnesium chloride",
-    "sodium fluoride",
-    "sodium bromide",
-    "potassium bromide",
-    "ammonium sulfate",
-    "sulfur dioxide",
-    "nitrogen dioxide",
-    "nitrous oxide",
-    "ozone",
-    "chlorine",
-    "bromine",
-]
 
 
 def fetch_json(url: str) -> dict:
@@ -109,23 +48,10 @@ def fetch_properties(cid: int) -> dict | None:
     return props[0] if props else None
 
 
-def fetch_synonyms(cid: int) -> list[str]:
-    url = f"{PUBCHEM_BASE}/compound/cid/{cid}/synonyms/JSON"
-    try:
-        data = fetch_json(url)
-    except Exception:
-        return []
-    return data.get("InformationList", {}).get("Information", [{}])[0].get("Synonym", [])[:10]
-
-
 def create_schema(connection: sqlite3.Connection) -> None:
-    cursor = connection.cursor()
-    cursor.executescript(
+    connection.executescript(
         """
-        DROP TABLE IF EXISTS compounds;
-        DROP TABLE IF EXISTS compound_elements;
-        DROP TABLE IF EXISTS citations;
-        CREATE TABLE compounds (
+        CREATE TABLE IF NOT EXISTS compounds (
             cid INTEGER PRIMARY KEY,
             name TEXT,
             formula TEXT,
@@ -136,53 +62,61 @@ def create_schema(connection: sqlite3.Connection) -> None:
             pubchem_url TEXT,
             data_json TEXT
         );
-        CREATE TABLE compound_elements (
+        CREATE TABLE IF NOT EXISTS compound_elements (
             cid INTEGER,
             atomic_number INTEGER,
             count INTEGER,
             PRIMARY KEY (cid, atomic_number)
-        );
-        CREATE TABLE citations (
-            source_id TEXT PRIMARY KEY,
-            label TEXT,
-            url TEXT
         );
         """
     )
     connection.commit()
 
 
-def insert_citations(connection: sqlite3.Connection) -> None:
-    connection.execute(
-        "INSERT INTO citations (source_id, label, url) VALUES (?, ?, ?)",
-        ("pubchem", "PubChem (NIH/NLM) citation guidelines", PUBCHEM_CITATION_URL),
-    )
-    connection.commit()
+def load_seed_names(seed_path: Path) -> list[str]:
+    with seed_path.open(newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        names = []
+        if reader.fieldnames and "name" in reader.fieldnames:
+            for row in reader:
+                name = (row.get("name") or "").strip()
+                if name:
+                    names.append(name)
+        else:
+            handle.seek(0)
+            reader_plain = csv.reader(handle)
+            for row in reader_plain:
+                if row:
+                    name = row[0].strip()
+                    if name and name.lower() != "name":
+                        names.append(name)
+        return names
 
 
-def build_db(output: Path) -> None:
+def build_db(seed_path: Path, output: Path) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(output)
     create_schema(connection)
-    insert_citations(connection)
 
-    for name in SEED_COMPOUNDS:
+    names = load_seed_names(seed_path)
+    for idx, name in enumerate(names, start=1):
+        print(f"[{idx}/{len(names)}] Resolving {name}…", file=sys.stderr)
         cid = resolve_cid(name)
         if not cid:
-            print(f"Skipping {name}: no CID found")
+            print(f"Skipping {name}: no CID found", file=sys.stderr)
             continue
         props = fetch_properties(cid)
         if not props:
-            print(f"Skipping {name}: no properties")
+            print(f"Skipping {name}: no properties", file=sys.stderr)
             continue
         formula = props.get("MolecularFormula")
         if not formula:
-            print(f"Skipping {name}: no formula")
+            print(f"Skipping {name}: no formula", file=sys.stderr)
             continue
         try:
             formula_counts = parse_formula(formula)
         except ValueError:
-            print(f"Skipping {name}: formula parse failed ({formula})")
+            print(f"Skipping {name}: formula parse failed ({formula})", file=sys.stderr)
             continue
         element_counts = []
         for symbol, count in formula_counts.items():
@@ -191,12 +125,7 @@ def build_db(output: Path) -> None:
                 continue
             element_counts.append((element.atomic_number, count))
 
-        data_json = json.dumps(
-            {
-                "iupac_name": props.get("IUPACName"),
-                "synonyms": fetch_synonyms(cid),
-            }
-        )
+        data_json = json.dumps({"iupac_name": props.get("IUPACName")})
         connection.execute(
             """
             INSERT OR REPLACE INTO compounds
@@ -227,13 +156,12 @@ def build_db(output: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Build the compound seed database from PubChem.")
-    parser.add_argument(
-        "--output",
-        type=Path,
-        default=Path(__file__).resolve().parents[1] / "src" / "orbsim" / "data" / "compounds.sqlite",
-    )
+    parser.add_argument("--seed", type=Path, default=Path("tools/seed_compounds.csv"))
+    parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
-    build_db(args.output)
+    if not args.seed.exists():
+        raise SystemExit(f"Seed file not found: {args.seed}")
+    build_db(args.seed, args.out)
 
 
 if __name__ == "__main__":
