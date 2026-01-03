@@ -71,7 +71,7 @@ def query_compounds_by_elements(
         ORDER BY c.is_seed DESC, c.name ASC
         LIMIT {limit}
     """
-    params = element_ids + having_params
+    params = element_ids + (element_ids if only_elements else []) + having_params
     with connect() as connection:
         rows = connection.execute(query, params).fetchall()
     results = []
