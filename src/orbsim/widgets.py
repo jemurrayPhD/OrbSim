@@ -169,6 +169,11 @@ class DropPlotter(QtWidgets.QFrame):
     def apply_theme(self, tokens: dict) -> None:
         self._theme_tokens = tokens
         self._apply_colorbar_style()
+        colors = tokens["colors"]
+        try:
+            self.plotter.set_background(colors["surfaceAlt"])
+        except Exception:
+            pass
         self._apply_bounds()
 
     def _apply_colorbar_style(self) -> None:
@@ -250,7 +255,16 @@ class DropPlotter(QtWidgets.QFrame):
                 if self._measurement_mode == "distance"
                 else "Measure angle: pick three points"
             )
-            self.plotter.add_text(hint, name="measure_hint", font_size=10)
+            colors = (self._theme_tokens or {}).get("colors", {})
+            text_color = colors.get("text", "white")
+            shadow = (self._theme_tokens or {}).get("meta", {}).get("mode") in ("dark", "high_contrast")
+            self.plotter.add_text(
+                hint,
+                name="measure_hint",
+                font_size=10,
+                color=text_color,
+                shadow=shadow,
+            )
         else:
             self.plotter.disable_picking()
 
@@ -325,24 +339,42 @@ class DropPlotter(QtWidgets.QFrame):
     def start_distance_measurement(self) -> None:
         self._clear_measurements(keep_mode=True)
         self._measurement_mode = "distance"
+        colors = (self._theme_tokens or {}).get("colors", {})
+        text_color = colors.get("text", "white")
+        shadow = (self._theme_tokens or {}).get("meta", {}).get("mode") in ("dark", "high_contrast")
         self.plotter.enable_point_picking(
             callback=self._on_pick,
             left_clicking=True,
             show_message=False,
             use_mesh=True,
         )
-        self.plotter.add_text("Measure distance: pick two points", name="measure_hint", font_size=10)
+        self.plotter.add_text(
+            "Measure distance: pick two points",
+            name="measure_hint",
+            font_size=10,
+            color=text_color,
+            shadow=shadow,
+        )
 
     def start_angle_measurement(self) -> None:
         self._clear_measurements(keep_mode=True)
         self._measurement_mode = "angle"
+        colors = (self._theme_tokens or {}).get("colors", {})
+        text_color = colors.get("text", "white")
+        shadow = (self._theme_tokens or {}).get("meta", {}).get("mode") in ("dark", "high_contrast")
         self.plotter.enable_point_picking(
             callback=self._on_pick,
             left_clicking=True,
             show_message=False,
             use_mesh=True,
         )
-        self.plotter.add_text("Measure angle: pick three points", name="measure_hint", font_size=10)
+        self.plotter.add_text(
+            "Measure angle: pick three points",
+            name="measure_hint",
+            font_size=10,
+            color=text_color,
+            shadow=shadow,
+        )
 
     def stop_measurements(self) -> None:
         self._clear_measurements()

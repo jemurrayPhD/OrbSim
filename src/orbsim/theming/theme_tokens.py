@@ -13,6 +13,7 @@ def _default_font_family() -> str:
 
 THEME_TOKENS: dict[str, dict] = {
     "Fluent Light": {
+        "meta": {"name": "Fluent Light", "mode": "light"},
         "colors": {
             "bg": "#f5f7fb",
             "surface": "#ffffff",
@@ -29,6 +30,7 @@ THEME_TOKENS: dict[str, dict] = {
         "font": {"family": _default_font_family(), "baseSize": 10, "titleSize": 12, "monoFamily": "Consolas"},
     },
     "Fluent Dark": {
+        "meta": {"name": "Fluent Dark", "mode": "dark"},
         "colors": {
             "bg": "#0b1220",
             "surface": "#111827",
@@ -45,6 +47,7 @@ THEME_TOKENS: dict[str, dict] = {
         "font": {"family": _default_font_family(), "baseSize": 10, "titleSize": 12, "monoFamily": "Consolas"},
     },
     "High Contrast": {
+        "meta": {"name": "High Contrast", "mode": "high_contrast"},
         "colors": {
             "bg": "#000000",
             "surface": "#000000",
