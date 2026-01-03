@@ -602,6 +602,11 @@ class OrbitalBoxView(QtWidgets.QWidget):
             "text": "#0f172a",
             "textMuted": "#4b5563",
         }
+        self._semantic_colors = {
+            "electron": QtGui.QColor("#3b82f6"),
+            "filled": QtGui.QColor("#22c55e"),
+            "vacancy": QtGui.QColor("#ef4444"),
+        }
         self.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Expanding)
         self.setMinimumHeight(320)
         self._order = [
