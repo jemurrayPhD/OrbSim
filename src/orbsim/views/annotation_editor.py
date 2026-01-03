@@ -184,7 +184,8 @@ class AnnotationEditorWindow(QtWidgets.QMainWindow):
         text_action.triggered.connect(lambda: self.canvas.set_tool("text"))
         toolbar.addAction(text_action)
         panel_action = QtGui.QAction("Panel label", self)
-        panel_action.triggered.connect(lambda: self.canvas.insert_text("Panel"))\n        toolbar.addAction(panel_action)
+        panel_action.triggered.connect(lambda: self.canvas.insert_text("Panel"))
+        toolbar.addAction(panel_action)
 
         toolbar.addSeparator()
         toolbar.addWidget(QtWidgets.QLabel("Lines/Arrows"))
