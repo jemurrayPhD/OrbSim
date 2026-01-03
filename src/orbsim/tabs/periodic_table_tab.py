@@ -7,6 +7,7 @@ import numpy as np
 from PySide6 import QtCore, QtGui, QtWidgets
 from pint import UnitRegistry
 
+from orbsim.colorbar_widget import HorizontalColorbarWidget
 from orbsim.tabs.shared import resolve_cmap
 from orbsim.ui.generated.ui_periodic_table import Ui_PeriodicTableTab
 from periodic_table_cli.cli import load_data
@@ -747,24 +748,30 @@ class PeriodicTableTab(QtWidgets.QWidget):
         self.legend_row.addStretch()
         top_layout.addWidget(self.legend_container)
 
-        self.colorbar_label = QtWidgets.QLabel()
-        self.colorbar_label.setAlignment(QtCore.Qt.AlignCenter)
-        self.colorbar_label.setVisible(False)
-        self.colorbar_label.setMaximumHeight(120)
-        top_layout.addWidget(self.colorbar_label)
+        self.colorbar_widget = HorizontalColorbarWidget()
+        self.colorbar_widget.setVisible(False)
+        top_layout.addWidget(self.colorbar_widget)
 
         self.grid_widget = self.TableCanvas(QtWidgets.QGridLayout(), self)
         self.grid_layout = self.grid_widget.layout()
         self.grid_layout.setSpacing(4)
         self.grid_layout.setContentsMargins(8, 8, 8, 8)
-        # period label + grid in horizontal layout
-        grid_row = QtWidgets.QHBoxLayout()
+        # period label + grid in horizontal layout inside scroll area
+        self.grid_row_widget = QtWidgets.QWidget()
+        grid_row = QtWidgets.QHBoxLayout(self.grid_row_widget)
+        grid_row.setContentsMargins(0, 0, 0, 0)
         self.period_label = self.RotatedLabel("Period", angle=-90)
         self.period_label.setAlignment(QtCore.Qt.AlignCenter)
         self.period_label.setContentsMargins(0, 12, 0, 12)
         grid_row.addWidget(self.period_label, 0)
         grid_row.addWidget(self.grid_widget, 1)
-        top_layout.addLayout(grid_row, 6)
+        self.grid_scroll_area = QtWidgets.QScrollArea()
+        self.grid_scroll_area.setWidgetResizable(True)
+        self.grid_scroll_area.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAsNeeded)
+        self.grid_scroll_area.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAsNeeded)
+        self.grid_scroll_area.setFrameShape(QtWidgets.QFrame.NoFrame)
+        self.grid_scroll_area.setWidget(self.grid_row_widget)
+        top_layout.addWidget(self.grid_scroll_area, 6)
 
         self.bohr_view = self.BohrViewer()
         self.bohr_view.setVisible(False)
@@ -789,13 +796,6 @@ class PeriodicTableTab(QtWidgets.QWidget):
         self.info.setMinimumWidth(360)
         self.info.anchorClicked.connect(self._handle_info_link)
         right.addWidget(self.info, 2)
-
-        controls_layout = QtWidgets.QHBoxLayout()
-        controls_layout.addWidget(QtWidgets.QLabel("Electron configuration for oxidation state:"))
-        self.oxidation_combo = QtWidgets.QComboBox()
-        self.oxidation_combo.currentIndexChanged.connect(self._on_oxidation_change)
-        controls_layout.addWidget(self.oxidation_combo, 1)
-        right.addLayout(controls_layout)
 
         main_splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal)
         main_splitter.setOpaqueResize(True)
@@ -831,6 +831,7 @@ class PeriodicTableTab(QtWidgets.QWidget):
         self.temp_unit_combo.currentIndexChanged.connect(self._on_temp_unit_change)
         self._on_scheme_change()
         self.apply_theme({"colors": self._theme_colors, "meta": {"mode": "light"}})
+        self._update_table_min_size()
 
     def apply_theme(self, tokens: dict) -> None:
         colors = tokens.get("colors", {})
@@ -850,12 +851,14 @@ class PeriodicTableTab(QtWidgets.QWidget):
                 border=self._theme_colors["border"],
             )
         )
+        self.colorbar_widget.apply_theme(tokens)
         for swatch in self.legend_swatches:
             style = swatch.styleSheet()
             base = style.split("border:")[0]
             swatch.setStyleSheet(base + f"border: 1px solid {self._theme_colors['border']};")
         self.grid_widget.update()
         self._apply_coloring()
+        self._update_table_min_size()
 
     def _elem_position(self, elem: dict) -> tuple[int, int]:
         an = elem["atomicNumber"]
@@ -896,34 +899,6 @@ class PeriodicTableTab(QtWidgets.QWidget):
                 return f"+{v}"
             return str(v)
         return ", ".join(fmt(s) for s in states)
-
-    def _oxidation_items(self, states: list[int]) -> list[tuple[str, int]]:
-        items = [("Neutral (0)", 0)]
-        for s in states:
-            label = f"Ion {self._format_oxidation_states([s])}"
-            items.append((label, s))
-        return items
-
-    def _update_oxidation_combo(self, elem: dict) -> None:
-        states = self._parse_oxidation_states(elem)
-        self.oxidation_combo.blockSignals(True)
-        self.oxidation_combo.clear()
-        for label, val in self._oxidation_items(states):
-            self.oxidation_combo.addItem(label, userData=val)
-        self.oxidation_combo.setCurrentIndex(0)
-        self.oxidation_combo.blockSignals(False)
-        self.current_oxidation_state = 0
-
-    def _on_oxidation_change(self) -> None:
-        if self.current_element is None:
-            return
-        val = self.oxidation_combo.currentData()
-        try:
-            self.current_oxidation_state = int(val)
-        except Exception:
-            self.current_oxidation_state = 0
-        self.bohr_view.set_oxidation_state(self.current_oxidation_state)
-        self._refresh_info()
 
     def _build_grid(self) -> None:
         # headers
@@ -975,6 +950,35 @@ class PeriodicTableTab(QtWidgets.QWidget):
         color = self.FAMILY_COLORS.get(key, "#94a3b8")
         return self._button_style(color, self._text_contrast(color))
 
+    def _update_table_min_size(self) -> None:
+        font = QtGui.QFont(self.font())
+        font.setPointSize(self.font_point_size)
+        metrics = QtGui.QFontMetrics(font)
+        text_width = max(metrics.horizontalAdvance("Mg"), metrics.horizontalAdvance("118"))
+        cell_width = max(60, text_width + 16)
+        cell_height = max(56, metrics.height() * 2 + 16)
+        cols = max(self.grid_layout.columnCount(), 19)
+        rows = max(self.grid_layout.rowCount(), 12)
+        spacing = self.grid_layout.spacing()
+        margins = self.grid_layout.contentsMargins()
+        period_width = max(self.period_label.sizeHint().width(), 24)
+        min_width = (
+            cell_width * cols
+            + spacing * max(cols - 1, 0)
+            + margins.left()
+            + margins.right()
+            + period_width
+        )
+        min_height = (
+            cell_height * rows
+            + spacing * max(rows - 1, 0)
+            + margins.top()
+            + margins.bottom()
+        )
+        self.grid_row_widget.setMinimumSize(min_width, min_height)
+        for btn in self.buttons.values():
+            btn.setMinimumSize(cell_width, cell_height)
+
     def _format_numeric(self, val: float) -> str:
         try:
             v = float(val)
@@ -990,19 +994,6 @@ class PeriodicTableTab(QtWidgets.QWidget):
             return f"{v:.2f}"
         return f"{v:.3f}"
 
-    def _unit_latex(self, unit: str | None) -> str | None:
-        if not unit:
-            return None
-        mapping = {
-            "g/cm^3": r"g\,cm^{-3}",
-            "u": r"u",
-            "pm": r"pm",
-            "K": r"K",
-            "degC": r"^{\circ}C",
-            "degF": r"^{\circ}F",
-        }
-        return mapping.get(unit, unit.replace("^", "^{") + "}" if "^" in unit else unit)
-
     def _unit_html(self, unit: str | None) -> str:
         if not unit:
             return ""
@@ -1012,6 +1003,12 @@ class PeriodicTableTab(QtWidgets.QWidget):
             "degF": "&deg;F",
         }
         return repl.get(unit, unit.replace("^", "<sup>") + "</sup>" if "^" in unit else unit)
+
+    def _unit_display(self, unit: str | None) -> str:
+        if not unit:
+            return ""
+        mapping = {"degC": "°C", "degF": "°F"}
+        return mapping.get(unit, unit)
 
     def _button_label(self, elem: dict, extra: str | None = None) -> str:
         base_top = f"{elem['symbol']}"
@@ -1114,6 +1111,7 @@ class PeriodicTableTab(QtWidgets.QWidget):
             self.font_point_size = 11
         self._apply_coloring()
         self._refresh_info()
+        self._update_table_min_size()
 
     def _handle_info_link(self, url: QtCore.QUrl) -> None:
         if url.toString() == "toggle-config":
@@ -1121,22 +1119,6 @@ class PeriodicTableTab(QtWidgets.QWidget):
             self._refresh_info()
         else:
             QtGui.QDesktopServices.openUrl(url)
-
-    def _on_oxidation_change(self) -> None:
-        if self.current_element is None:
-            return
-        val = self.oxidation_combo.currentData()
-        try:
-            self.current_oxidation_state = int(val)
-        except Exception:
-            self.current_oxidation_state = 0
-        self.bohr_view.set_oxidation_state(self.current_oxidation_state)
-        self._refresh_info()
-        # keep orbital box dialog in sync if open
-        dlg = getattr(self, "_orbital_box_dialog", None)
-        if dlg and dlg.isVisible():
-            dlg.close()
-            self._show_orbital_box_dialog()
 
     def _apply_coloring(self) -> None:
         meta = self.scheme_combo.currentData()
@@ -1148,14 +1130,14 @@ class PeriodicTableTab(QtWidgets.QWidget):
         # Toggle legend/colorbar visibility
         if scheme in ("family", "state"):
             self.legend_container.setVisible(True)
-            self.colorbar_label.setVisible(False)
+            self.colorbar_widget.setVisible(False)
         else:
             self.legend_container.setVisible(False)
             try:
                 self._render_table_colorbar(field, scheme, meta["label"])
             except Exception as exc:
                 print(f"Table colorbar render error: {exc}", file=sys.stderr)
-                self.colorbar_label.setVisible(False)
+                self.colorbar_widget.setVisible(False)
 
         # Precompute numeric range if needed
         vmin = vmax = None
@@ -1225,13 +1207,6 @@ class PeriodicTableTab(QtWidgets.QWidget):
                 btn.setText(self._button_label(elem, extra))
 
     def _render_table_colorbar(self, field: str, scheme_key: str, label: str) -> None:
-        try:
-            import matplotlib.pyplot as plt
-            from matplotlib import colors, ticker
-        except Exception as exc:
-            self.colorbar_label.setText(label)
-            print(f"Table colorbar render fallback: {exc}", file=sys.stderr)
-            return
         vals: list[float] = []
         unit_used: str | None = None
         log_scale = getattr(self, "scale_mode", "linear") == "log"
@@ -1243,52 +1218,29 @@ class PeriodicTableTab(QtWidgets.QWidget):
                 vals.append(mag)
                 unit_used = unit_used or u
         if not vals:
-            self.colorbar_label.setVisible(False)
+            self.colorbar_widget.setVisible(False)
             return
         vmin, vmax = min(vals), max(vals)
         if log_scale:
             vmin = max(vmin, sys.float_info.min)
             if math.isclose(vmin, vmax):
                 vmax = vmin * 1.1
-            norm = colors.LogNorm(vmin=vmin, vmax=vmax)
         else:
             if math.isclose(vmin, vmax):
                 vmax = vmin + 1.0
-            norm = colors.Normalize(vmin=vmin, vmax=vmax)
-        cmap_obj = self._get_cmap(self.current_table_cmap or self._scheme_default_cmap(scheme_key))
-        fig, ax = plt.subplots(figsize=(4.2, 0.42))
-        fig.patch.set_facecolor("#111827")
-        sm = plt.cm.ScalarMappable(cmap=cmap_obj, norm=norm)
-        sm.set_array([])
-        cbar = fig.colorbar(sm, cax=ax, orientation="horizontal")
-        unit_latex = self._unit_latex(unit_used)
-        lbl = label if not unit_latex else f"{label}\\;[{unit_latex}]"
-        cbar.set_label(f"$\\mathrm{{{lbl}}}$", color="#e5e7eb", fontsize=8)
-        formatter = ticker.ScalarFormatter(useMathText=True)
-        formatter.set_powerlimits((-2, 3))
-        cbar.formatter = formatter
-        cbar.update_ticks()
-        cbar.ax.tick_params(labelsize=7, colors="#e5e7eb")
-        cbar.outline.set_edgecolor("#e5e7eb")
-        for spine in ax.spines.values():
-            spine.set_edgecolor("#e5e7eb")
-        buf = io.BytesIO()
-        fig.savefig(buf, format="png", dpi=200, bbox_inches="tight", facecolor=fig.get_facecolor())
-        plt.close(fig)
-        pixmap = QtGui.QPixmap()
-        pixmap.loadFromData(buf.getvalue())
-        if pixmap.height() > 100:
-            pixmap = pixmap.scaledToHeight(100, QtCore.Qt.TransformationMode.SmoothTransformation)
-        self.colorbar_label.setPixmap(pixmap)
-        self.colorbar_label.setMinimumHeight(pixmap.height() + 6)
-        self.colorbar_label.setStyleSheet("background-color: #111827; border: 1px solid #1f2937; padding: 4px;")
-        self.colorbar_label.setVisible(True)
+        unit_display = self._unit_display(unit_used)
+        lbl = label if not unit_display else f"{label} [{unit_display}]"
+        if log_scale:
+            lbl = f"{lbl} (log)"
+        cmap_name = self.current_table_cmap or self._scheme_default_cmap(scheme_key)
+        self.colorbar_widget.set_data(cmap_name, vmin, vmax, lbl, "log" if log_scale else "linear")
+        self.colorbar_widget.setVisible(True)
     def _select_atomic_number(self, atomic_number: int) -> None:
         elem = next((e for e in self.data["elements"] if e["atomicNumber"] == atomic_number), None)
         if not elem:
             return
         self.current_element = elem
-        self._update_oxidation_combo(elem)
+        self.current_oxidation_state = 0
         for btn in self.buttons.values():
             btn.setChecked(False)
         if atomic_number in self.buttons:

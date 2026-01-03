@@ -12,6 +12,7 @@ from dataclasses import dataclass
 
 import numpy as np
 import pyvista as pv
+import vtk
 from PySide6 import QtCore, QtGui, QtWidgets
 from pint import UnitRegistry
 from pyvistaqt import QtInteractor
@@ -269,6 +270,8 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         self._theme_tokens: dict | None = None
         self._text_color = "#ffffff"
         self._text_shadow = True
+        self._slice_plane_color = "#cbd5e1"
+        self._slice_plane_edge_color = "#94a3b8"
         self.plotter_frame = self.ui.plotterFrame
         try:
             self.plotter_frame.colorbar.hide()
@@ -307,8 +310,12 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         self._colorbar_drag_start: float | None = None
         self._slice_data_range: tuple[float, float] | None = None
         self._slice_autoscale_done: bool = False
-        self._scale_bar_actor = None
+        self._scale_bar_actor_2d = None
+        self._scale_bar_points = None
+        self._scale_bar_poly = None
         self._scale_bar_text = None
+        self._scale_bar_length_px = 120
+        self._scale_bar_margin = (24, 24)
         self._last_slice_bounds: tuple[float, float, float, float, float, float] | None = None
 
         self.controls = self._build_controls()
@@ -342,6 +349,8 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         mode = tokens.get("meta", {}).get("mode", "light")
         self._text_color = colors["text"]
         self._text_shadow = mode in ("dark", "high_contrast")
+        self._slice_plane_color = colors["surfaceAlt"]
+        self._slice_plane_edge_color = colors["surfaceAlt"] if mode == "high_contrast" else colors["border"]
         self.plotter_frame.apply_theme(tokens)
         try:
             self.plotter.set_background(colors["surfaceAlt"])
@@ -358,6 +367,7 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         self.slice_colorbar_range.setStyleSheet(
             "color: {text}; padding: 2px; font-size: 10px;".format(text=colors["textMuted"])
         )
+        self._update_slice_scalebar()
 
     def _get_cmap(self, name: str):
         return resolve_cmap(name)
@@ -1011,6 +1021,7 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
             side = min(self.slice_container.width(), self.slice_container.height())
             if side > 0:
                 self.slice_view.setFixedSize(side, side)
+                QtCore.QTimer.singleShot(0, self._update_slice_scalebar)
         if obj is self.slice_colorbar:
             if event.type() == QtCore.QEvent.MouseButtonPress and event.button() == QtCore.Qt.MouseButton.LeftButton:
                 self._colorbar_drag_start = event.position().x()
@@ -1026,6 +1037,9 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
                 self._slice_autoscale()
                 return True
         if obj is self.slice_view and event.type() == QtCore.QEvent.Wheel:
+            QtCore.QTimer.singleShot(0, self._update_slice_scalebar)
+            return False
+        if obj is self.slice_view and event.type() == QtCore.QEvent.Resize:
             QtCore.QTimer.singleShot(0, self._update_slice_scalebar)
             return False
         return super().eventFilter(obj, event)
@@ -1218,7 +1232,7 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         try:
             if self.pref_show_slice_plane:
                 plane_geom = pv.Plane(
-                    center=origin, direction=normal, i_size=plane_size, j_size=plane_size, i_resolution=2, j_resolution=2
+                    center=origin, direction=normal, i_size=plane_size, j_size=plane_size, i_resolution=20, j_resolution=20
                 )
                 opacity_val = max(0.0, min(1.0, float(getattr(self, "pref_slice_plane_opacity", 0.35))))
                 if self.slice_plane_actor:
@@ -1228,11 +1242,11 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
                         pass
                 self.slice_plane_actor = self.plotter.add_mesh(
                     plane_geom,
-                    color="#cbd5e1",
+                    color=self._slice_plane_color,
                     opacity=opacity_val,
                     lighting=False,
                     show_edges=True,
-                    edge_color="#94a3b8",
+                    edge_color=self._slice_plane_edge_color,
                     smooth_shading=False,
                     show_scalar_bar=False,
                 )
@@ -1412,34 +1426,68 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         except Exception as exc:
             print(f"Slice plane error: {exc}", file=sys.stderr)
 
+    def _ensure_scale_bar_actor(self) -> None:
+        if self._scale_bar_actor_2d is not None:
+            return
+        points = vtk.vtkPoints()
+        points.SetNumberOfPoints(2)
+        lines = vtk.vtkCellArray()
+        lines.InsertNextCell(2)
+        lines.InsertCellPoint(0)
+        lines.InsertCellPoint(1)
+        poly = vtk.vtkPolyData()
+        poly.SetPoints(points)
+        poly.SetLines(lines)
+        mapper = vtk.vtkPolyDataMapper2D()
+        mapper.SetInputData(poly)
+        coord = vtk.vtkCoordinate()
+        coord.SetCoordinateSystemToDisplay()
+        mapper.SetTransformCoordinate(coord)
+        actor = vtk.vtkActor2D()
+        actor.SetMapper(mapper)
+        actor.GetProperty().SetLineWidth(2.0)
+        self.slice_view.renderer.AddActor2D(actor)
+        self._scale_bar_actor_2d = actor
+        self._scale_bar_points = points
+        self._scale_bar_poly = poly
+
     def _draw_slice_scalebar(self, bounds: tuple[float, float, float, float, float, float] | None = None) -> None:
         if bounds is None:
             bounds = self._last_slice_bounds
         if bounds is None:
             return
         try:
-            width = max(bounds[1] - bounds[0], bounds[3] - bounds[2])
-            visible_scale = None
+            self._ensure_scale_bar_actor()
+            render_window = getattr(self.slice_view, "render_window", None)
+            if render_window:
+                width_px, height_px = render_window.GetSize()
+            else:
+                width_px, height_px = self.slice_view.width(), self.slice_view.height()
+            if height_px <= 0:
+                return
             try:
                 visible_scale = float(self.slice_view.camera.parallel_scale)
             except Exception:
                 visible_scale = None
-            scalebar_length = visible_scale * 0.5 if visible_scale and visible_scale > 0 else (width / 4 if width > 0 else 1.0)
-            start = (bounds[0] + scalebar_length * 0.15, bounds[2] + scalebar_length * 0.15, bounds[4])
-            end = (start[0] + scalebar_length, start[1], start[2])
-            if self._scale_bar_actor:
-                try:
-                    self.slice_view.remove_actor(self._scale_bar_actor)
-                except Exception:
-                    pass
+            if not visible_scale or visible_scale <= 0:
+                return
+            world_height = 2 * visible_scale
+            world_per_px = world_height / height_px
+            scalebar_length = world_per_px * self._scale_bar_length_px
+            start_x, start_y = self._scale_bar_margin
+            end_x = start_x + self._scale_bar_length_px
+            end_y = start_y
+            self._scale_bar_points.SetPoint(0, start_x, start_y, 0)
+            self._scale_bar_points.SetPoint(1, end_x, end_y, 0)
+            self._scale_bar_points.Modified()
+            self._scale_bar_poly.Modified()
+            color = QtGui.QColor(self._text_color)
+            self._scale_bar_actor_2d.GetProperty().SetColor(color.redF(), color.greenF(), color.blueF())
             if self._scale_bar_text:
                 try:
                     self.slice_view.remove_actor(self._scale_bar_text)
                 except Exception:
                     pass
-            self._scale_bar_actor = self.slice_view.add_lines(
-                np.array([start, end]), color=self._text_color, width=3
-            )
             self._scale_bar_text = self.slice_view.add_text(
                 f"{scalebar_length:.2f} A",
                 position="lower_left",
@@ -1452,15 +1500,6 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
             print(f"Scalebar render error: {exc}", file=sys.stderr)
 
     def _update_slice_scalebar(self) -> None:
-        try:
-            if self._scale_bar_actor:
-                self.slice_view.remove_actor(self._scale_bar_actor)
-                self._scale_bar_actor = None
-            if self._scale_bar_text:
-                self.slice_view.remove_actor(self._scale_bar_text)
-                self._scale_bar_text = None
-        except Exception:
-            pass
         self._draw_slice_scalebar(self._last_slice_bounds)
 
     def _autoscale(self) -> None:

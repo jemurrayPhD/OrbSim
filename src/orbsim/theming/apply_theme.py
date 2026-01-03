@@ -46,21 +46,21 @@ def build_stylesheet(tokens: dict) -> str:
     is_high_contrast = mode == "high_contrast"
     is_dark = mode == "dark"
 
-    button_border = colors["border"] if is_high_contrast else colors["surfaceAlt"]
-    button_bg = colors["surfaceAlt"] if not is_high_contrast else colors["surface"]
+    button_border = colors["surfaceAlt"] if is_high_contrast else colors["surfaceAlt"]
+    button_bg = colors["surfaceAlt"] if is_high_contrast else colors["surfaceAlt"]
     button_hover = colors["surface"] if not is_high_contrast else colors["surfaceAlt"]
     input_focus_bg = colors["surfaceAlt"] if not is_high_contrast else colors["surfaceAlt"]
     tab_unselected_bg = colors["surfaceAlt"] if not is_high_contrast else colors["surface"]
     tab_selected_bg = colors["surface"] if not is_high_contrast else colors["surfaceAlt"]
-    tab_border = colors["border"]
+    tab_border = colors["surfaceAlt"] if is_high_contrast else colors["border"]
     tab_selected_border = colors["accent"]
     input_border = colors["border"]
     card_border = colors["border"]
     focus_border_width = 1
     focus_padding_adjust = 0
     if is_high_contrast:
-        focus_border_width = 2
-        focus_padding_adjust = 1
+        focus_border_width = 1
+        focus_padding_adjust = 0
     return f"""
     * {{
         font-family: "{font["family"]}";
@@ -103,7 +103,7 @@ def build_stylesheet(tokens: dict) -> str:
     }}
     QPushButton:hover, QToolButton:hover {{
         background: {button_hover};
-        border-color: {colors["accent"] if not is_high_contrast else colors["border"]};
+        border-color: {colors["accent"] if not is_high_contrast else colors["surfaceAlt"]};
     }}
     QPushButton:pressed, QToolButton:pressed {{
         background: {colors["surfaceAlt"]};
