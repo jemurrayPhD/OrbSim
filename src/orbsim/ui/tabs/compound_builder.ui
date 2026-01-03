@@ -29,19 +29,7 @@
     </layout>
    </item>
    <item>
-    <layout class="QHBoxLayout" name="mainLayout">
-     <item>
-      <widget class="QGroupBox" name="inventoryGroup">
-       <property name="title">
-        <string>Inventory</string>
-       </property>
-       <layout class="QVBoxLayout" name="inventoryLayout">
-        <item>
-         <widget class="QWidget" name="inventoryPlaceholder"/>
-        </item>
-       </layout>
-      </widget>
-     </item>
+    <layout class="QHBoxLayout" name="upperLayout">
      <item>
       <widget class="QGroupBox" name="craftingGroup">
        <property name="title">
@@ -67,6 +55,27 @@
         <string>Recipe guide</string>
        </property>
        <layout class="QVBoxLayout" name="recipeLayout">
+        <item>
+         <layout class="QHBoxLayout" name="filterLayout">
+          <item>
+           <widget class="QRadioButton" name="compatibleRadio">
+            <property name="text">
+             <string>Compatible</string>
+            </property>
+            <property name="checked">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QRadioButton" name="exactRadio">
+            <property name="text">
+             <string>Exact match</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
         <item>
          <widget class="QLineEdit" name="recipeSearchLineEdit">
           <property name="placeholderText">
@@ -104,7 +113,31 @@
        </layout>
       </widget>
      </item>
+     <item>
+      <widget class="QGroupBox" name="previewGroup">
+       <property name="title">
+        <string>Preview</string>
+       </property>
+       <layout class="QVBoxLayout" name="previewLayout">
+        <item>
+         <widget class="QWidget" name="previewPlaceholder"/>
+        </item>
+       </layout>
+      </widget>
+     </item>
     </layout>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="inventoryGroup">
+     <property name="title">
+      <string>Periodic Table Inventory</string>
+     </property>
+     <layout class="QVBoxLayout" name="inventoryLayout">
+      <item>
+       <widget class="QWidget" name="inventoryPlaceholder"/>
+      </item>
+     </layout>
+    </widget>
    </item>
    <item>
     <widget class="QFrame" name="citationFrame">

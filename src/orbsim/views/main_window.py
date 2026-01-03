@@ -13,6 +13,7 @@ from orbsim.tabs.bonding_orbitals_tab import BondingOrbitalsTab
 from orbsim.tabs.compound_builder_tab import CompoundBuilderTab
 from orbsim.tabs.electron_shells_tab import ElectronShellsTab
 from orbsim.tabs.periodic_table_tab import PeriodicTableTab
+from orbsim.views.annotation_editor import AnnotationEditorWindow
 from orbsim.widgets import DropPlotter, PeriodicTableWidget
 
 
@@ -38,6 +39,7 @@ class OrbSimMainWindow(QtWidgets.QMainWindow):
         self.tabs.addTab(CompoundBuilderTab(), "Compound Builder")
         self._annotation_layers: dict[QtWidgets.QWidget, OrbSimMainWindow.AnnotationLayer] = {}
         self._annotation_toolbox: OrbSimMainWindow.AnnotationToolbox | None = None
+        self._annotation_editors: list[AnnotationEditorWindow] = []
         for i in range(self.tabs.count()):
             self._annotation_layer_for_tab(self.tabs.widget(i))
         self.tabs.currentChanged.connect(self._on_tab_changed)
@@ -184,6 +186,12 @@ class OrbSimMainWindow(QtWidgets.QMainWindow):
         return base
 
     def _copy_current_view(self) -> None:
+        decision = self._prompt_annotation_action()
+        if decision == "annotate":
+            self._open_annotation_editor()
+            return
+        if decision == "cancel":
+            return
         pixmap = self._grab_current_view()
         QtWidgets.QApplication.clipboard().setPixmap(pixmap)
 
@@ -201,6 +209,12 @@ class OrbSimMainWindow(QtWidgets.QMainWindow):
             painter.end()
 
     def _export_current_view(self) -> None:
+        decision = self._prompt_annotation_action()
+        if decision == "annotate":
+            self._open_annotation_editor()
+            return
+        if decision == "cancel":
+            return
         filters = "PNG (*.png);;JPEG (*.jpg *.jpeg);;PDF (*.pdf)"
         path, selected = QtWidgets.QFileDialog.getSaveFileName(self, "Export current view", "", filters)
         if not path:
@@ -235,6 +249,32 @@ class OrbSimMainWindow(QtWidgets.QMainWindow):
 
     def _on_tab_changed(self, index: int) -> None:
         self._refresh_annotation_layers()
+
+    def _prompt_annotation_action(self) -> str:
+        dialog = QtWidgets.QMessageBox(self)
+        dialog.setWindowTitle("Annotate current view?")
+        dialog.setText("Annotate current view?")
+        annotate_btn = dialog.addButton("Annotate", QtWidgets.QMessageBox.ButtonRole.AcceptRole)
+        export_btn = dialog.addButton("Export without annotation", QtWidgets.QMessageBox.ButtonRole.DestructiveRole)
+        cancel_btn = dialog.addButton("Cancel", QtWidgets.QMessageBox.ButtonRole.RejectRole)
+        dialog.exec()
+        clicked = dialog.clickedButton()
+        if clicked == annotate_btn:
+            return "annotate"
+        if clicked == export_btn:
+            return "export"
+        if clicked == cancel_btn:
+            return "cancel"
+        return "cancel"
+
+    def _open_annotation_editor(self) -> None:
+        pixmap = self._grab_current_view()
+        editor = AnnotationEditorWindow(pixmap, self)
+        editor.setAttribute(QtCore.Qt.WidgetAttribute.WA_DeleteOnClose, True)
+        tokens = get_theme_tokens(self._theme_name)
+        editor.apply_theme(tokens)
+        editor.show()
+        self._annotation_editors.append(editor)
 
     def _annotation_layer_for_tab(self, tab: QtWidgets.QWidget, create: bool = True):
         if tab in self._annotation_layers:

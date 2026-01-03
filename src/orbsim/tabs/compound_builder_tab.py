@@ -1,17 +1,15 @@
 from __future__ import annotations
 
-from collections import Counter
 from pathlib import Path
 import sys
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from orbsim.chem.compound_db import db_exists, get_compound_details, get_db_path, query_compounds_by_elements
-from orbsim.chem.elements import ATOMIC_NUMBER_TO_SYMBOL
-from orbsim.chem.formula_parser import expand_formula_to_atomic_numbers, parse_formula
-from orbsim.dialogs.compound_details_dialog import CompoundDetailsDialog
+from orbsim.chem.elements import ATOMIC_NUMBER_TO_SYMBOL, SYMBOL_TO_ELEMENT
+from orbsim.chem.formula_parser import parse_formula
 from orbsim.ui.generated.ui_compound_builder import Ui_CompoundBuilderTab
-from orbsim.widgets import CraftingGridWidget, InventoryPeriodicTableWidget
+from orbsim.widgets import AggregatedCraftingGridWidget, CompoundPreviewPane, PeriodicTableInventoryWidget
 
 
 PUBCHEM_CITATION_URL = "https://pubchem.ncbi.nlm.nih.gov/docs/citation-guidelines"
@@ -28,16 +26,19 @@ class CompoundBuilderTab(QtWidgets.QWidget):
         self._builder_process: QtCore.QProcess | None = None
         self._build_stdout: list[str] = []
         self._build_stderr: list[str] = []
+        self._active_formula: str | None = None
 
-        self.inventory_widget = InventoryPeriodicTableWidget(self)
-        self.crafting_grid = CraftingGridWidget(self)
+        self.inventory_widget = PeriodicTableInventoryWidget(self)
+        self.crafting_grid = AggregatedCraftingGridWidget(self)
+        self.preview_pane = CompoundPreviewPane(self)
 
         self.ui.inventoryLayout.replaceWidget(self.ui.inventoryPlaceholder, self.inventory_widget)
         self.ui.inventoryPlaceholder.deleteLater()
         self.ui.craftingLayout.replaceWidget(self.ui.craftingPlaceholder, self.crafting_grid)
         self.ui.craftingPlaceholder.deleteLater()
+        self.ui.previewLayout.replaceWidget(self.ui.previewPlaceholder, self.preview_pane)
+        self.ui.previewPlaceholder.deleteLater()
 
-        self._active_formula: str | None = None
         self._update_timer = QtCore.QTimer(self)
         self._update_timer.setSingleShot(True)
         self._update_timer.setInterval(200)
@@ -47,10 +48,13 @@ class CompoundBuilderTab(QtWidgets.QWidget):
         self.ui.clearButton.clicked.connect(self._clear_crafting)
         self.ui.formulaLineEdit.returnPressed.connect(self._apply_formula)
         self.ui.recipeSearchLineEdit.textChanged.connect(self._queue_refresh)
-        self.crafting_grid.changed.connect(self._on_crafting_changed)
-        self.ui.recipeListWidget.itemActivated.connect(self._open_compound_dialog)
+        self.ui.compatibleRadio.toggled.connect(self._queue_refresh)
+        self.ui.exactRadio.toggled.connect(self._queue_refresh)
+        self.crafting_grid.crafting_changed.connect(self._on_crafting_changed)
+        self.ui.recipeListWidget.itemSelectionChanged.connect(self._select_compound)
         self.ui.openCitationButton.clicked.connect(self._open_citation_page)
         self.ui.buildDbButton.clicked.connect(self._start_build)
+        self.inventory_widget.element_added.connect(self._add_element_from_inventory)
 
         self.ui.citationLabel.setOpenExternalLinks(True)
         self.ui.citationLabel.setText(
@@ -95,6 +99,7 @@ class CompoundBuilderTab(QtWidgets.QWidget):
         )
         self.inventory_widget.apply_theme(tokens)
         self.crafting_grid.apply_theme(tokens)
+        self.preview_pane.apply_theme(tokens)
         self.ui.citationFrame.setStyleSheet(
             f"background: {colors['surfaceAlt']};"
             f"border: 1px solid {colors['border']};"
@@ -108,16 +113,17 @@ class CompoundBuilderTab(QtWidgets.QWidget):
         if self._db_ready:
             self._update_timer.start()
 
-    def _on_crafting_changed(self) -> None:
-        self._update_current_elements_label()
+    def _on_crafting_changed(self, counts: dict[int, int]) -> None:
+        self._update_current_elements_label(counts)
         self._queue_refresh()
 
-    def _update_current_elements_label(self) -> None:
-        elements = self.crafting_grid.get_elements()
-        if not elements:
+    def _add_element_from_inventory(self, atomic_number: int) -> None:
+        self.crafting_grid.add_element(atomic_number)
+
+    def _update_current_elements_label(self, counts: dict[int, int]) -> None:
+        if not counts:
             self.ui.currentElementsLabel.setText("Current elements: (none)")
             return
-        counts = Counter(elements)
         parts = []
         for atomic_number in sorted(counts):
             symbol = ATOMIC_NUMBER_TO_SYMBOL.get(atomic_number, str(atomic_number))
@@ -130,32 +136,38 @@ class CompoundBuilderTab(QtWidgets.QWidget):
         if not text:
             return
         try:
-            elements = expand_formula_to_atomic_numbers(text)
+            counts = parse_formula(text)
         except ValueError as exc:
             QtWidgets.QMessageBox.warning(self, "Formula error", str(exc))
             return
-        if len(elements) > 9:
+        if len(counts) > 9:
             QtWidgets.QMessageBox.information(
                 self,
                 "Formula too large",
-                "Formula exceeds the 3×3 grid; truncating to the first 9 atoms.",
+                "Formula exceeds the 9 distinct element limit; truncating to the first 9 element types.",
             )
-            elements = elements[:9]
-        self.crafting_grid.set_elements(elements)
+            counts = dict(list(counts.items())[:9])
+        atomic_counts: dict[int, int] = {}
+        for symbol, count in counts.items():
+            element = SYMBOL_TO_ELEMENT.get(symbol)
+            if element:
+                atomic_counts[element.atomic_number] = count
+        self.crafting_grid.set_counts(atomic_counts)
         self._active_formula = text
-        self._on_crafting_changed()
+        self._on_crafting_changed(self.crafting_grid.counts())
 
     def _clear_crafting(self) -> None:
         self.crafting_grid.clear()
         self._active_formula = None
-        self._on_crafting_changed()
+        self.preview_pane.set_compound(None)
+        self._on_crafting_changed(self.crafting_grid.counts())
 
     def _refresh_recipe_list(self) -> None:
         if not self._db_ready:
             return
-        elements = self.crafting_grid.get_elements()
-        required_counts = Counter(elements)
-        results = query_compounds_by_elements(required_counts)
+        required_counts = self.crafting_grid.counts()
+        exact = self.ui.exactRadio.isChecked()
+        results = query_compounds_by_elements(required_counts, exact=exact)
         search = self.ui.recipeSearchLineEdit.text().strip().lower()
         if search:
             results = [
@@ -182,20 +194,18 @@ class CompoundBuilderTab(QtWidgets.QWidget):
             label = f"{result['name']} — {result['formula']}"
             item = QtWidgets.QListWidgetItem(label)
             item.setData(QtCore.Qt.ItemDataRole.UserRole, result["cid"])
-            if formula and (result["formula"] or "").lower() == formula.lower() and self._theme_tokens:
-                item.setForeground(QtGui.QColor(self._theme_tokens["colors"]["accent"]))
             self.ui.recipeListWidget.addItem(item)
 
-    def _open_compound_dialog(self, item: QtWidgets.QListWidgetItem) -> None:
-        cid = item.data(QtCore.Qt.ItemDataRole.UserRole)
+    def _select_compound(self) -> None:
+        selected = self.ui.recipeListWidget.selectedItems()
+        if not selected:
+            self.preview_pane.set_compound(None)
+            return
+        cid = selected[0].data(QtCore.Qt.ItemDataRole.UserRole)
         if not cid:
             return
         compound = get_compound_details(int(cid))
-        if not compound:
-            QtWidgets.QMessageBox.warning(self, "Missing data", "Compound details are unavailable.")
-            return
-        dialog = CompoundDetailsDialog(compound, self)
-        dialog.exec()
+        self.preview_pane.set_compound(compound)
 
     def _open_citation_page(self) -> None:
         QtGui.QDesktopServices.openUrl(QtCore.QUrl(PUBCHEM_CITATION_URL))
@@ -204,6 +214,8 @@ class CompoundBuilderTab(QtWidgets.QWidget):
         self._db_ready = db_exists()
         self.ui.recipeSearchLineEdit.setEnabled(self._db_ready)
         self.ui.recipeListWidget.setEnabled(self._db_ready)
+        self.ui.compatibleRadio.setEnabled(self._db_ready)
+        self.ui.exactRadio.setEnabled(self._db_ready)
         self.ui.buildDbButton.setVisible(not self._db_ready)
         self.ui.buildProgressBar.setVisible(False)
         if self._db_ready:
