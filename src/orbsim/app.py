@@ -33,6 +33,8 @@ from periodic_table_cli.cli import ChartConfig, DataConfig, load_data
 from periodic_table_cli.chart_processor import ChartProcessor
 from periodic_table_cli.data_processor import DataProcessor
 from orbsim.widgets import CollapsibleGroup, DropPlotter
+from orbsim.theming.apply_theme import apply_theme
+from orbsim.theming.theme_tokens import THEME_TOKENS, get_theme_tokens
 
 ureg = UnitRegistry()
 Q_ = ureg.Quantity
@@ -3947,8 +3949,11 @@ class OrbSimWindow(QtWidgets.QMainWindow):
         super().__init__()
         self.setWindowTitle("OrbSim")
         self.setMinimumSize(1200, 720)
+        self._settings = QtCore.QSettings("OrbSim", "OrbSim")
+        self._theme_name = self._settings.value("theme", "Fluent Light")
 
         self._build_toolbar()
+        self._build_menus()
 
         self.tabs = QtWidgets.QTabWidget()
         # Order: Periodic Table, Electron Shells, Atomic Orbitals, Bonding Orbitals
@@ -3969,6 +3974,7 @@ class OrbSimWindow(QtWidgets.QMainWindow):
         self.setCentralWidget(self.tabs)
 
         self.statusBar().showMessage("Drag elements into the visualization pane to begin.")
+        self.apply_theme(self._theme_name)
 
     def closeEvent(self, event) -> None:
         for index in range(self.tabs.count()):
@@ -4053,6 +4059,35 @@ class OrbSimWindow(QtWidgets.QMainWindow):
 
         self._annotate_act = annotate_act
         self._show_annotations_act = show_act
+
+    def _build_menus(self) -> None:
+        view_menu = self.menuBar().addMenu("View")
+        theme_menu = view_menu.addMenu("Theme")
+        theme_group = QtGui.QActionGroup(self)
+        theme_group.setExclusive(True)
+        for name in THEME_TOKENS.keys():
+            action = QtGui.QAction(name, self)
+            action.setCheckable(True)
+            action.setChecked(name == self._theme_name)
+            action.triggered.connect(lambda checked, n=name: self.apply_theme(n))
+            theme_group.addAction(action)
+            theme_menu.addAction(action)
+
+    def apply_theme(self, theme_name: str) -> None:
+        self._theme_name = theme_name
+        self._settings.setValue("theme", theme_name)
+        tokens = get_theme_tokens(theme_name)
+        app = QtWidgets.QApplication.instance()
+        if app:
+            apply_theme(app, tokens)
+        for tab_index in range(self.tabs.count()):
+            tab = self.tabs.widget(tab_index)
+            for widget in tab.findChildren((DropPlotter,)):
+                widget.apply_theme(tokens)
+            for widget in tab.findChildren(QtWidgets.QTableWidget):
+                if hasattr(widget, "apply_theme"):
+                    widget.apply_theme(tokens)
+        self._refresh_annotation_layers()
 
     def _grab_current_view(self) -> QtGui.QPixmap:
         target: QtWidgets.QWidget = self.tabs.currentWidget() if getattr(self, "tabs", None) else self
@@ -4753,12 +4788,6 @@ def _point_to_line_distance(point: QtCore.QPointF, line: QtCore.QLineF) -> float
 def main() -> None:
     app = QtWidgets.QApplication(sys.argv)
     app.setStyle("Fusion")
-    # enforce reasonable minimum heights so text stays readable even when layouts are squeezed
-    app.setStyleSheet(
-        "QLineEdit, QTextEdit, QTextBrowser, QPlainTextEdit { min-height: 28px; }"
-        "QComboBox, QSpinBox, QDoubleSpinBox, QDateTimeEdit { min-height: 28px; }"
-        "QLabel { min-height: 18px; }"
-    )
     window = OrbSimWindow()
     window.setMinimumSize(1400, 800)
     window.show()

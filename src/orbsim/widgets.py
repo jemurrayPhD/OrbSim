@@ -64,6 +64,7 @@ class PeriodicTableWidget(QtWidgets.QTableWidget):
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
+        self._theme_tokens: dict | None = None
         self.setRowCount(4)
         self.setColumnCount(18)
         self.setShowGrid(True)
@@ -74,6 +75,21 @@ class PeriodicTableWidget(QtWidgets.QTableWidget):
         self._configure_headers()
         self._populate()
         self.cellClicked.connect(self._on_cell_clicked)
+
+    def apply_theme(self, tokens: dict) -> None:
+        self._theme_tokens = tokens
+        colors = tokens["colors"]
+        self.setStyleSheet(
+            "QTableWidget {"
+            f"background: {colors['surface']};"
+            f"color: {colors['text']};"
+            f"gridline-color: {colors['border']};"
+            "}"
+            "QTableWidget::item:selected {"
+            f"background: {colors['accent']};"
+            f"color: {colors['bg']};"
+            "}"
+        )
 
     def _configure_headers(self) -> None:
         self.horizontalHeader().setVisible(False)
@@ -130,6 +146,7 @@ class DropPlotter(QtWidgets.QFrame):
         super().__init__(parent)
         self.setAcceptDrops(True)
         self.setFrameStyle(QtWidgets.QFrame.StyledPanel | QtWidgets.QFrame.Sunken)
+        self._theme_tokens: dict | None = None
         self._measurement_mode: str | None = None
         self._picked_points: list[np.ndarray] = []
         self._measurement_actors: list[int] = []
@@ -141,9 +158,7 @@ class DropPlotter(QtWidgets.QFrame):
         self.colorbar = QtWidgets.QLabel()
         self.colorbar.setMinimumWidth(48)
         self.colorbar.setAlignment(QtCore.Qt.AlignmentFlag.AlignHCenter | QtCore.Qt.AlignmentFlag.AlignVCenter)
-        self.colorbar.setStyleSheet(
-            "background-color: #111827; color: #e5e7eb; border: 1px solid #94a3b8; padding: 4px;"
-        )
+        self._apply_colorbar_style()
         self._apply_bounds()
 
         layout = QtWidgets.QHBoxLayout(self)
@@ -151,7 +166,23 @@ class DropPlotter(QtWidgets.QFrame):
         layout.addWidget(self.plotter, 1)
         layout.addWidget(self.colorbar, 0)
 
+    def apply_theme(self, tokens: dict) -> None:
+        self._theme_tokens = tokens
+        self._apply_colorbar_style()
+        self._apply_bounds()
+
+    def _apply_colorbar_style(self) -> None:
+        colors = (self._theme_tokens or {}).get("colors", {})
+        bg = colors.get("surface", "#111827")
+        text = colors.get("text", "#e5e7eb")
+        border = colors.get("border", "#94a3b8")
+        self.colorbar.setStyleSheet(
+            f"background-color: {bg}; color: {text}; border: 1px solid {border}; padding: 4px;"
+        )
+
     def _apply_bounds(self) -> None:
+        colors = (self._theme_tokens or {}).get("colors", {})
+        axis_color = colors.get("text", "#f8fafc")
         if not self.show_bounds_axes:
             try:
                 self.plotter.remove_bounds_axes()
@@ -167,7 +198,7 @@ class DropPlotter(QtWidgets.QFrame):
                 xtitle="x (angstrom)",
                 ytitle="y (angstrom)",
                 ztitle="z (angstrom)",
-                color="#f8fafc",
+                color=axis_color,
                 bold=True,
                 font_size=12,
                 show_xlabels=True,
@@ -233,22 +264,28 @@ class DropPlotter(QtWidgets.QFrame):
             self._render_angle()
 
     def _render_distance(self) -> None:
+        colors = (self._theme_tokens or {}).get("colors", {})
+        accent = colors.get("accent", "#93c5fd")
+        text_color = colors.get("text", "white")
         p1, p2 = self._picked_points[:2]
         distance = float(np.linalg.norm(p2 - p1))
-        line_actor = self.plotter.add_mesh(pv.Line(p1, p2), color="#93c5fd", line_width=4)
+        line_actor = self.plotter.add_mesh(pv.Line(p1, p2), color=accent, line_width=4)
         mid = (p1 + p2) / 2
         label_actor = self.plotter.add_point_labels(
             [mid],
             [f"{distance:.2f} angstrom"],
             point_size=0,
             font_size=12,
-            text_color="white",
+            text_color=text_color,
         )
         self._measurement_actors.append(line_actor)
         self._measurement_labels.append(label_actor)
         self._picked_points.clear()
 
     def _render_angle(self) -> None:
+        colors = (self._theme_tokens or {}).get("colors", {})
+        accent = colors.get("accentHover", "#f97316")
+        text_color = colors.get("text", "white")
         p1, p2, p3 = self._picked_points[:3]
         v1 = p1 - p2
         v2 = p3 - p2
@@ -257,7 +294,7 @@ class DropPlotter(QtWidgets.QFrame):
         angle_deg = np.degrees(angle_rad)
         polyline = self.plotter.add_mesh(
             pv.Spline(np.vstack([p1, p2, p3]), 50),
-            color="#f97316",
+            color=accent,
             line_width=4,
             opacity=0.85,
         )
@@ -266,7 +303,7 @@ class DropPlotter(QtWidgets.QFrame):
             [f"{angle_deg:.1f} deg"],
             point_size=0,
             font_size=12,
-            text_color="white",
+            text_color=text_color,
         )
         self._measurement_actors.append(polyline)
         self._measurement_labels.append(label_actor)
@@ -312,6 +349,8 @@ class DropPlotter(QtWidgets.QFrame):
 
     def update_colorbar(self, cmap: str, clim: tuple[float, float], label: str) -> None:
         """Render a small standalone colorbar next to the plotter."""
+        colors = (self._theme_tokens or {}).get("colors", {})
+        text = colors.get("text", "#e5e7eb")
         try:
             from matplotlib import cm
         except Exception:
@@ -326,7 +365,7 @@ class DropPlotter(QtWidgets.QFrame):
         image = QtGui.QImage(bar.data, bar.shape[1], bar.shape[0], QtGui.QImage.Format_RGB888).copy()
         pixmap = QtGui.QPixmap.fromImage(image)
         painter = QtGui.QPainter(pixmap)
-        painter.setPen(QtGui.QPen(QtGui.QColor("#e5e7eb")))
+        painter.setPen(QtGui.QPen(QtGui.QColor(text)))
         font = painter.font()
         font.setPointSize(8)
         painter.setFont(font)
@@ -345,9 +384,7 @@ class DropPlotter(QtWidgets.QFrame):
         self.colorbar.setPixmap(pixmap)
         self.colorbar.setMinimumWidth(width + 30)
         self.colorbar.setToolTip(f"{label}: {clim[0]:.3g} to {clim[1]:.3g}")
-        self.colorbar.setStyleSheet(
-            "background-color: #111827; color: #e5e7eb; border: 1px solid #94a3b8; padding: 4px;"
-        )
+        self._apply_colorbar_style()
 
     def cleanup(self) -> None:
         """Close the underlying VTK render window before Qt tears down."""

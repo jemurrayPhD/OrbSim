@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>ElectronShellsTab</class>
+ <widget class="QWidget" name="ElectronShellsTab">
+  <layout class="QVBoxLayout" name="rootLayout">
+   <item>
+    <widget class="QWidget" name="contentWidget">
+     <layout class="QVBoxLayout" name="contentLayout"/>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
