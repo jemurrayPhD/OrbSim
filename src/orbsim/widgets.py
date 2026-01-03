@@ -423,7 +423,6 @@ class ElementTileWidget(QtWidgets.QFrame):
         self.setFrameShadow(QtWidgets.QFrame.Shadow.Raised)
         self.setCursor(QtCore.Qt.CursorShape.OpenHandCursor)
         self.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
-        self._drag_start_pos: QtCore.QPoint | None = None
 
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
@@ -456,19 +455,8 @@ class ElementTileWidget(QtWidgets.QFrame):
 
     def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:
         if event.button() == QtCore.Qt.MouseButton.LeftButton:
-            self._drag_start_pos = event.pos()
-        super().mousePressEvent(event)
-
-    def mouseMoveEvent(self, event: QtGui.QMouseEvent) -> None:
-        if (
-            event.buttons() & QtCore.Qt.MouseButton.LeftButton
-            and self._drag_start_pos is not None
-            and (event.pos() - self._drag_start_pos).manhattanLength()
-            > QtWidgets.QApplication.startDragDistance()
-        ):
             self._start_drag()
-            self._drag_start_pos = None
-        super().mouseMoveEvent(event)
+        super().mousePressEvent(event)
 
     def _start_drag(self) -> None:
         payload = json.dumps({"Z": self.element.atomic_number, "symbol": self.element.symbol}).encode("utf-8")
