@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6 import QtGui
+from PySide6 import QtCore, QtGui
 
 
 try:
@@ -12,8 +12,10 @@ except Exception:
 
 
 def load_icon(name: str) -> QtGui.QIcon:
-    icon = QtGui.QIcon(f":/icons/{name}")
-    if not icon.isNull():
-        return icon
+    resource_path = f":/icons/{name}"
+    if QtCore.QFile.exists(resource_path):
+        icon = QtGui.QIcon(resource_path)
+        if not icon.isNull():
+            return icon
     asset_path = Path(__file__).resolve().parent / "assets" / "icons" / name
     return QtGui.QIcon(str(asset_path))

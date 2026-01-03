@@ -722,10 +722,10 @@ class OrbitalBoxView(QtWidgets.QWidget):
                 electrons = max(0, min(cap, electrons))
                 boxes = self._fill_orbitals(electrons, deg)
 
-                    painter.setPen(QtGui.QPen(text, 2))
-                    painter.setBrush(QtCore.Qt.NoBrush)
-                    label = f"{n}{label_map.get(l, '?')}"
-                    painter.drawText(x, y - 6, label)
+                painter.setPen(QtGui.QPen(text, 2))
+                painter.setBrush(QtCore.Qt.NoBrush)
+                label = f"{n}{label_map.get(l, '?')}"
+                painter.drawText(x, y - 6, label)
 
                 for j, (up, down) in enumerate(boxes):
                     bx = x + j * (box_w + spacing)
