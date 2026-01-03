@@ -134,10 +134,20 @@ class SubshellMiniWidget(QtWidgets.QWidget):
             "text": "#0f172a",
             "textMuted": "#4b5563",
         }
+        self._semantic_colors = {
+            "electron": QtGui.QColor("#3b82f6"),
+            "filled": QtGui.QColor("#22c55e"),
+            "vacancy": QtGui.QColor("#ef4444"),
+        }
         self.setMinimumSize(80, 80)
 
     def apply_theme(self, colors: dict) -> None:
         self._theme_colors.update(colors)
+        mode = colors.get("mode") if isinstance(colors, dict) else None
+        if mode == "dark" or mode == "high_contrast":
+            self._semantic_colors["electron"] = QtGui.QColor("#60a5fa")
+            self._semantic_colors["filled"] = QtGui.QColor("#4ade80")
+            self._semantic_colors["vacancy"] = QtGui.QColor("#f87171")
         self.update()
 
     def paintEvent(self, event):
@@ -152,14 +162,16 @@ class SubshellMiniWidget(QtWidgets.QWidget):
             dot_r = radius * 0.18
 
             border = QtGui.QColor(self._theme_colors["border"])
-            accent = QtGui.QColor(self._theme_colors["accent"])
+            electron = self._semantic_colors["electron"]
+            filled = self._semantic_colors["filled"]
+            vacancy = self._semantic_colors["vacancy"]
             text = QtGui.QColor(self._theme_colors["text"])
             muted = QtGui.QColor(self._theme_colors["textMuted"])
 
             pen = QtGui.QPen(border)
             pen.setWidth(2 if not self.is_full else 3)
             if self.is_full:
-                pen.setColor(accent)
+                pen.setColor(filled)
             painter.setPen(pen)
             painter.setBrush(QtCore.Qt.NoBrush)
             painter.drawEllipse(center, radius, radius)
@@ -172,14 +184,14 @@ class SubshellMiniWidget(QtWidgets.QWidget):
                     center.y() + radius * math.sin(ang),
                 )
                 if idx < self.filled:
-                    pen = QtGui.QPen(accent if self.is_full else text)
+                    pen = QtGui.QPen(filled if self.is_full else electron)
                     pen.setWidthF(2 if self.is_full else 1.5)
                     painter.setPen(pen)
-                    painter.setBrush(QtGui.QBrush(accent))
+                    painter.setBrush(QtGui.QBrush(electron))
                     painter.drawEllipse(pos, dot_r, dot_r)
                 else:
                     painter.setBrush(QtCore.Qt.NoBrush)
-                    pen = QtGui.QPen(muted)
+                    pen = QtGui.QPen(vacancy)
                     pen.setWidthF(1.5)
                     painter.setPen(pen)
                     painter.drawEllipse(pos, dot_r, dot_r)
@@ -203,11 +215,26 @@ class BohrViewer(QtWidgets.QWidget):
             "text": "#0f172a",
             "textMuted": "#4b5563",
         }
+        self._semantic_colors = {
+            "electron": QtGui.QColor("#3b82f6"),
+            "filled": QtGui.QColor("#22c55e"),
+            "vacancy": QtGui.QColor("#ef4444"),
+        }
+        self._semantic_colors = {
+            "electron": QtGui.QColor("#3b82f6"),
+            "filled": QtGui.QColor("#22c55e"),
+            "vacancy": QtGui.QColor("#ef4444"),
+        }
         self.setMinimumHeight(220)
 
     def apply_theme(self, tokens: dict) -> None:
         colors = tokens.get("colors", {})
         self._theme_colors.update(colors)
+        mode = tokens.get("meta", {}).get("mode")
+        if mode in ("dark", "high_contrast"):
+            self._semantic_colors["electron"] = QtGui.QColor("#60a5fa")
+            self._semantic_colors["filled"] = QtGui.QColor("#4ade80")
+            self._semantic_colors["vacancy"] = QtGui.QColor("#f87171")
         self.update()
 
     def set_element(self, elem: dict) -> None:
@@ -359,7 +386,9 @@ class BohrViewer(QtWidgets.QWidget):
             dot_r = step * 0.06
 
             border = QtGui.QColor(self._theme_colors["border"])
-            accent = QtGui.QColor(self._theme_colors["accent"])
+            electron = self._semantic_colors["electron"]
+            filled = self._semantic_colors["filled"]
+            vacancy = self._semantic_colors["vacancy"]
             text = QtGui.QColor(self._theme_colors["text"])
             muted = QtGui.QColor(self._theme_colors["textMuted"])
             surface_alt = QtGui.QColor(self._theme_colors["surfaceAlt"])
@@ -401,15 +430,15 @@ class BohrViewer(QtWidgets.QWidget):
                             center.y() + radius * math.sin(ang),
                         )
                         if idx < filled:
-                            pen_color = accent if full else text
+                            pen_color = filled if full else electron
                             pen = QtGui.QPen(pen_color)
                             pen.setWidthF(2 if full else 1.5)
                             painter.setPen(pen)
-                            painter.setBrush(QtGui.QBrush(accent))
+                            painter.setBrush(QtGui.QBrush(electron))
                             painter.drawEllipse(pos, dot_r, dot_r)
                         else:
                             painter.setBrush(QtCore.Qt.NoBrush)
-                            pen = QtGui.QPen(muted)
+                            pen = QtGui.QPen(vacancy)
                             pen.setWidthF(1.5)
                             painter.setPen(pen)
                             painter.drawEllipse(pos, dot_r, dot_r)
@@ -417,7 +446,7 @@ class BohrViewer(QtWidgets.QWidget):
                         filled_annotations.append(f"{n}{'spdf'[l]}")
 
             if filled_annotations:
-                painter.setPen(QtGui.QPen(accent))
+                painter.setPen(QtGui.QPen(filled))
                 painter.drawText(
                     QtCore.QPointF(10, h - 10),
                     "Filled subshells: " + ", ".join(filled_annotations),
@@ -584,6 +613,11 @@ class OrbitalBoxView(QtWidgets.QWidget):
 
     def apply_theme(self, colors: dict) -> None:
         self._theme_colors.update(colors)
+        mode = colors.get("mode") if isinstance(colors, dict) else None
+        if mode == "dark" or mode == "high_contrast":
+            self._semantic_colors["electron"] = QtGui.QColor("#60a5fa")
+            self._semantic_colors["filled"] = QtGui.QColor("#4ade80")
+            self._semantic_colors["vacancy"] = QtGui.QColor("#f87171")
         self.update()
 
     def _degeneracy(self, l: int) -> int:
@@ -655,26 +689,28 @@ class OrbitalBoxView(QtWidgets.QWidget):
             row_h = max(36.0, min(120.0, min(avail_h / max_row, base_row_h)))
             base_y = self.height() - margin - row_h
 
-            accent = QtGui.QColor(self._theme_colors["accent"])
+            electron = self._semantic_colors["electron"]
+            filled = self._semantic_colors["filled"]
+            vacancy = self._semantic_colors["vacancy"]
             text = QtGui.QColor(self._theme_colors["text"])
             border = QtGui.QColor(self._theme_colors["border"])
 
             arrow_x = left_margin / 2
             arrow_top = top_margin
             arrow_bottom = self.height() - margin
-            painter.setPen(QtGui.QPen(text, 3.5))
+            painter.setPen(QtGui.QPen(electron, 3.5))
             painter.drawLine(arrow_x, arrow_bottom, arrow_x, arrow_top + 16)
             head = QtGui.QPolygonF([
                 QtCore.QPointF(arrow_x, arrow_top),
                 QtCore.QPointF(arrow_x - 9, arrow_top + 16),
                 QtCore.QPointF(arrow_x + 9, arrow_top + 16),
             ])
-            painter.setBrush(QtGui.QBrush(text))
+            painter.setBrush(QtGui.QBrush(electron))
             painter.drawPolygon(head)
             painter.save()
             painter.translate(arrow_x - 16, (arrow_top + arrow_bottom) / 2)
             painter.rotate(-90)
-            painter.setPen(QtGui.QPen(text))
+            painter.setPen(QtGui.QPen(electron))
             painter.drawText(QtCore.QPointF(-30, 0), "Energy")
             painter.restore()
 
@@ -686,22 +722,27 @@ class OrbitalBoxView(QtWidgets.QWidget):
                 electrons = max(0, min(cap, electrons))
                 boxes = self._fill_orbitals(electrons, deg)
 
-                painter.setPen(QtGui.QPen(text, 2))
-                painter.setBrush(QtCore.Qt.NoBrush)
-                label = f"{n}{label_map.get(l, '?')}"
-                painter.drawText(x, y - 6, label)
+                    painter.setPen(QtGui.QPen(text, 2))
+                    painter.setBrush(QtCore.Qt.NoBrush)
+                    label = f"{n}{label_map.get(l, '?')}"
+                    painter.drawText(x, y - 6, label)
 
                 for j, (up, down) in enumerate(boxes):
                     bx = x + j * (box_w + spacing)
                     by = y
                     rect = QtCore.QRectF(bx, by, box_w, box_h)
-                    painter.setPen(QtGui.QPen(border, 2))
+                    if electrons == 0:
+                        painter.setPen(QtGui.QPen(vacancy, 2))
+                    elif electrons >= cap:
+                        painter.setPen(QtGui.QPen(filled, 2))
+                    else:
+                        painter.setPen(QtGui.QPen(border, 2))
                     painter.drawRect(rect)
                     if up:
-                        painter.setPen(QtGui.QPen(text, 2))
+                        painter.setPen(QtGui.QPen(electron, 2))
                         painter.drawText(rect.center() + QtCore.QPointF(-4, 6), up)
                     if down:
-                        painter.setPen(QtGui.QPen(accent, 2))
+                        painter.setPen(QtGui.QPen(electron, 2))
                         painter.drawText(rect.center() + QtCore.QPointF(-4, 6), down)
         finally:
             painter.end()

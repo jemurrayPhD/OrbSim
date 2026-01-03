@@ -436,6 +436,7 @@ class ElementTileWidget(QtWidgets.QFrame):
         self._show_atomic_number = True
         self._count = 0
         self._show_count_badge = False
+        self._square = False
         self.setObjectName("inventoryElementTile")
         self.setFrameShape(QtWidgets.QFrame.Shape.StyledPanel)
         self.setFrameShadow(QtWidgets.QFrame.Shadow.Raised)
@@ -458,6 +459,23 @@ class ElementTileWidget(QtWidgets.QFrame):
         self._count = max(int(count), 0)
         self._show_count_badge = show_badge
         self.update()
+
+    def set_square(self, enabled: bool) -> None:
+        self._square = enabled
+        self.updateGeometry()
+
+    def hasHeightForWidth(self) -> bool:
+        return self._square
+
+    def heightForWidth(self, width: int) -> int:
+        return width if self._square else super().heightForWidth(width)
+
+    def sizeHint(self) -> QtCore.QSize:
+        base = super().sizeHint()
+        if self._square:
+            size = max(base.width(), base.height(), 76)
+            return QtCore.QSize(size, size)
+        return base
 
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:
         painter = QtGui.QPainter(self)
@@ -766,6 +784,8 @@ class CraftingTableSlotWidget(QtWidgets.QFrame):
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
+        self.setMinimumSize(76, 76)
+        self.setSizePolicy(QtWidgets.QSizePolicy.Policy.Preferred, QtWidgets.QSizePolicy.Policy.Preferred)
         self.setAcceptDrops(True)
         self.setObjectName("craftingTableSlot")
         self._theme_tokens: dict | None = None
@@ -774,7 +794,9 @@ class CraftingTableSlotWidget(QtWidgets.QFrame):
 
         self.tile = ElementTileWidget(Element(0), self)
         self.tile.set_show_atomic_number(False)
+        self.tile.set_square(True)
         self.tile.setEnabled(False)
+        self.tile.setMinimumSize(76, 76)
 
         self.add_button = QtWidgets.QToolButton()
         self.add_button.setAutoRaise(True)
@@ -914,6 +936,9 @@ class CraftingTableWidget(QtWidgets.QWidget):
         layout = QtWidgets.QGridLayout(self)
         layout.setSpacing(8)
         layout.setContentsMargins(4, 4, 4, 4)
+        min_slot = 76
+        min_size = min_slot * 3 + layout.spacing() * 2 + layout.contentsMargins().left() + layout.contentsMargins().right()
+        self.setMinimumSize(min_size, min_size)
         self._slots: list[CraftingTableSlotWidget] = []
         for row in range(3):
             for col in range(3):

@@ -21,6 +21,7 @@ class SubshellGridView(QtWidgets.QWidget):
 
     def apply_theme(self, tokens: dict) -> None:
         colors = tokens.get("colors", {})
+        colors = {**colors, "mode": tokens.get("meta", {}).get("mode")}
         self._theme_colors.update(colors)
         for child in self.findChildren(SubshellMiniWidget):
             child.apply_theme(colors)
@@ -73,7 +74,9 @@ class OrbitalBoxContainer(QtWidgets.QWidget):
         layout.addWidget(self.view)
 
     def apply_theme(self, tokens: dict) -> None:
-        self.view.apply_theme(tokens.get("colors", {}))
+        colors = tokens.get("colors", {})
+        colors = {**colors, "mode": tokens.get("meta", {}).get("mode")}
+        self.view.apply_theme(colors)
 
     def update_view(self, elem: dict, oxidation: int) -> None:
         self.view.elem = elem

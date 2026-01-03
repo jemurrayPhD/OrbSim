@@ -201,6 +201,10 @@ class PeriodicTableTab(QtWidgets.QWidget):
         self.info.setMinimumWidth(360)
         self.info.anchorClicked.connect(self._handle_info_link)
         right.addWidget(self.info, 2)
+        self.family_overview_box = QtWidgets.QLabel()
+        self.family_overview_box.setWordWrap(True)
+        self.family_overview_box.setObjectName("familyOverviewBox")
+        right.addWidget(self.family_overview_box)
 
         main_splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal)
         main_splitter.setOpaqueResize(True)
@@ -256,6 +260,13 @@ class PeriodicTableTab(QtWidgets.QWidget):
             "font-size: 11pt; background: {bg}; border: 1px solid {border}; border-radius: 6px; padding: 8px;".format(
                 bg=self._theme_colors["surface"],
                 border=self._theme_colors["border"],
+            )
+        )
+        self.family_overview_box.setStyleSheet(
+            "font-size: 10pt; background: {bg}; border: 1px solid {border}; border-radius: 6px; padding: 8px; color: {text};".format(
+                bg=self._theme_colors["surfaceAlt"],
+                border=self._theme_colors["border"],
+                text=self._theme_colors["text"],
             )
         )
         self.colorbar_widget.apply_theme(tokens)
@@ -770,11 +781,11 @@ class PeriodicTableTab(QtWidgets.QWidget):
             + "".join(rows) +
             "</table>"
         )
-        if fam_summary:
-            table_html += (
-                "<div style='margin-top:10px; padding:8px; border:1px solid #cbd5e1; border-radius:6px; background:#f8fafc;'>"
-                f"<b>{family_norm} overview:</b> {fam_summary}"
-                "</div>"
-            )
         table_html += "</body></html>"
         self.info.setHtml(table_html)
+        if fam_summary:
+            self.family_overview_box.setText(f"<b>{family_norm} overview:</b> {fam_summary}")
+            self.family_overview_box.setVisible(True)
+        else:
+            self.family_overview_box.clear()
+            self.family_overview_box.setVisible(False)

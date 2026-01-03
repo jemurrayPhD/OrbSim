@@ -28,6 +28,7 @@ from orbsim.orbitals import (
 )
 from orbsim.tabs.shared import resolve_cmap
 from orbsim.ui.generated.ui_atomic_orbitals import Ui_AtomicOrbitalsTab
+from orbsim.views.clipping_controller import ClippingController
 from orbsim.views.slicing_controller import SlicingController
 from orbsim.widgets import DropPlotter
 
@@ -264,7 +265,10 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         self.slice_offset = 0.0
         self.slice_origin: np.ndarray | None = None
         self.slice_mode: str = "none"
-        self.slice_box_bounds: tuple[float, float, float, float, float, float] | None = None
+        self.clip_mode: str = "none"
+        self.clip_plane_normal: np.ndarray | None = None
+        self.clip_plane_origin: np.ndarray | None = None
+        self.clip_box_bounds: tuple[float, float, float, float, float, float] | None = None
         self.slice_plane_actor = None
         self.offset_spin: QtWidgets.QDoubleSpinBox | None = None
         self.offset_slider: QtWidgets.QSlider | None = None
@@ -286,9 +290,12 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         self.plotter = self.plotter_frame.plotter
         self.slicing_controller = SlicingController(self.plotter)
         self.slicing_controller.slice_changed.connect(self._on_slice_widget_changed)
+        self.clipping_controller = ClippingController(self.plotter)
+        self.clipping_controller.clip_changed.connect(self._on_clip_widget_changed)
         try:
             self.plotter.enable_anti_aliasing()
             self.plotter.enable_eye_dome_lighting()
+            self.plotter.enable_depth_peeling()
         except Exception:
             pass
         self._setup_lights()
@@ -438,12 +445,23 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         self.slice_mode_combo = QtWidgets.QComboBox()
         self.slice_mode_combo.addItem("None", "none")
         self.slice_mode_combo.addItem("Plane", "plane")
-        self.slice_mode_combo.addItem("Box clip", "box")
         self.slice_mode_combo.currentIndexChanged.connect(self._on_slice_mode_change)
         slicing_layout.addRow("Mode", self.slice_mode_combo)
-        reset_btn = QtWidgets.QPushButton("Reset slicing")
-        reset_btn.clicked.connect(self._reset_slicing)
-        slicing_layout.addRow(reset_btn)
+        reset_slice_btn = QtWidgets.QPushButton("Reset slicing")
+        reset_slice_btn.clicked.connect(self._reset_slicing)
+        slicing_layout.addRow(reset_slice_btn)
+
+        clip_group = QtWidgets.QGroupBox("Clipping (3D)")
+        clip_layout = QtWidgets.QFormLayout(clip_group)
+        self.clip_mode_combo = QtWidgets.QComboBox()
+        self.clip_mode_combo.addItem("None", "none")
+        self.clip_mode_combo.addItem("Plane clip", "plane")
+        self.clip_mode_combo.addItem("Box clip", "box")
+        self.clip_mode_combo.currentIndexChanged.connect(self._on_clip_mode_change)
+        clip_layout.addRow("Mode", self.clip_mode_combo)
+        reset_clip_btn = QtWidgets.QPushButton("Reset clip")
+        reset_clip_btn.clicked.connect(self._reset_clipping)
+        clip_layout.addRow(reset_clip_btn)
 
         quantum_group = QtWidgets.QGroupBox("Quantum numbers")
         quantum_layout = QtWidgets.QFormLayout(quantum_group)
@@ -467,6 +485,7 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
 
         layout.addWidget(three_d_group)
         layout.addWidget(slicing_group)
+        layout.addWidget(clip_group)
         layout.addWidget(quantum_group)
 
         # 2D controls (non-collapsible)
@@ -625,6 +644,15 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         if self.slicing_controller:
             self.slicing_controller.reset()
 
+    def _on_clip_mode_change(self) -> None:
+        mode = self.clip_mode_combo.currentData() if hasattr(self, "clip_mode_combo") else "none"
+        if self.clipping_controller:
+            self.clipping_controller.set_mode(mode)
+
+    def _reset_clipping(self) -> None:
+        if self.clipping_controller:
+            self.clipping_controller.reset()
+
     def _set_cmap(self, cmap: str) -> None:
         self.current_cmap = cmap
         self._render_orbital()
@@ -676,7 +704,6 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         mode = payload.get("mode", "none")
         self.slice_mode = mode
         plane = payload.get("plane", {}) if isinstance(payload.get("plane"), dict) else {}
-        box = payload.get("box", {}) if isinstance(payload.get("box"), dict) else {}
         if mode == "plane":
             origin = plane.get("origin")
             normal = plane.get("normal")
@@ -686,13 +713,32 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
                     self.slice_normal = np.array(normal, dtype=float)
                 except Exception:
                     pass
+        else:
+            self.slice_origin = None
+        self._render_orbital()
+
+    def _on_clip_widget_changed(self, payload: dict) -> None:
+        mode = payload.get("mode", "none")
+        self.clip_mode = mode
+        plane = payload.get("plane", {}) if isinstance(payload.get("plane"), dict) else {}
+        box = payload.get("box", {}) if isinstance(payload.get("box"), dict) else {}
+        if mode == "plane":
+            origin = plane.get("origin")
+            normal = plane.get("normal")
+            if origin is not None and normal is not None:
+                try:
+                    self.clip_plane_origin = np.array(origin, dtype=float)
+                    self.clip_plane_normal = np.array(normal, dtype=float)
+                except Exception:
+                    pass
         elif mode == "box":
             bounds = box.get("bounds")
             if bounds is not None:
-                self.slice_box_bounds = tuple(bounds)
+                self.clip_box_bounds = tuple(bounds)
         else:
-            self.slice_origin = None
-            self.slice_box_bounds = None
+            self.clip_plane_origin = None
+            self.clip_plane_normal = None
+            self.clip_box_bounds = None
         self._render_orbital()
 
     def _update_visibility_controls(self) -> None:
@@ -935,6 +981,10 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         self.plotter_frame.reset_scene()
         self.slice_view.clear()
         self.slice_plane_actor = None
+        if self.slicing_controller and self.slice_mode != "none":
+            self.slicing_controller.set_mode(self.slice_mode)
+        if self.clipping_controller and self.clip_mode != "none":
+            self.clipping_controller.set_mode(self.clip_mode)
         if self.camera_initialized and camera_state:
             try:
                 self.plotter.camera_position = camera_state
@@ -942,11 +992,21 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
                 pass
         if not fields:
             return
-        clip_bounds = self.slice_box_bounds if self.slice_mode == "box" else None
+        clip_bounds = self.clip_box_bounds if self.clip_mode == "box" else None
         if clip_bounds and vol_field:
             try:
                 vol_field = vol_field.copy()
                 vol_field.dataset = vol_field.dataset.clip_box(clip_bounds, invert=False)
+            except Exception:
+                pass
+        if self.clip_mode == "plane" and self.clip_plane_normal is not None and self.clip_plane_origin is not None:
+            try:
+                vol_field = vol_field.copy()
+                vol_field.dataset = vol_field.dataset.clip(
+                    normal=self.clip_plane_normal,
+                    origin=self.clip_plane_origin,
+                    invert=False,
+                )
             except Exception:
                 pass
         if self.current_representation == "volume":
@@ -987,6 +1047,15 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
                         dataset = dataset.clip_box(clip_bounds, invert=False)
                     except Exception:
                         dataset = field.dataset
+                if self.clip_mode == "plane" and self.clip_plane_normal is not None and self.clip_plane_origin is not None:
+                    try:
+                        dataset = dataset.clip(
+                            normal=self.clip_plane_normal,
+                            origin=self.clip_plane_origin,
+                            invert=False,
+                        )
+                    except Exception:
+                        dataset = dataset
                 self.plotter.add_mesh(
                     dataset,
                     scalars=field.scalar_name,
@@ -1236,11 +1305,6 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
             return
         normal = normal / norm
         volume_ds = volume_field.dataset
-        if self.slice_mode == "box" and self.slice_box_bounds:
-            try:
-                volume_ds = volume_ds.clip_box(self.slice_box_bounds, invert=False)
-            except Exception:
-                pass
         try:
             bounds = volume_ds.bounds
         except Exception:

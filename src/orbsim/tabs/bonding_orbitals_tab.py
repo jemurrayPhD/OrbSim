@@ -660,6 +660,10 @@ class BondingOrbitalsTab(AtomicOrbitalsTab):
                 pass
         else:
             self.plotter_frame.reset_scene()
+            if self.slicing_controller and self.slice_mode != "none":
+                self.slicing_controller.set_mode(self.slice_mode)
+            if self.clipping_controller and self.clip_mode != "none":
+                self.clipping_controller.set_mode(self.clip_mode)
         if not reuse_slice:
             self.slice_view.clear()
             self.slice_plane_actor = None
