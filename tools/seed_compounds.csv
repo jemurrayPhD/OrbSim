@@ -1,59 +1,199 @@
-name
-water
-hydrogen peroxide
-carbon dioxide
-carbon monoxide
-methane
-ethane
-propane
-butane
-ethanol
-methanol
-glucose
-sucrose
-sodium chloride
-potassium chloride
-ammonia
-nitric acid
-sulfuric acid
-hydrochloric acid
-phosphoric acid
-calcium carbonate
-sodium bicarbonate
-calcium hydroxide
-sodium hydroxide
-magnesium sulfate
-copper sulfate
-iron(iii) oxide
-iron(ii) oxide
-aluminum oxide
-silicon dioxide
-sodium nitrate
-potassium nitrate
-sodium sulfate
-ammonium chloride
-ammonium nitrate
-acetic acid
-formic acid
-citric acid
-urea
-benzene
-toluene
-phenol
-acetone
-formaldehyde
-glycine
-alanine
-sodium hypochlorite
-calcium chloride
-magnesium chloride
-sodium fluoride
-sodium bromide
-potassium bromide
-ammonium sulfate
-sulfur dioxide
-nitrogen dioxide
-nitrous oxide
-ozone
-chlorine
-bromine
+name,formula,category,notes
+Water,H2O,core,
+Hydrogen peroxide,H2O2,core,
+Oxygen,O2,core,diatomic
+Nitrogen,N2,core,diatomic
+Hydrogen,H2,core,diatomic
+Chlorine,Cl2,core,diatomic
+Bromine,Br2,core,diatomic
+Iodine,I2,core,diatomic
+Ozone,O3,core,
+Carbon dioxide,CO2,core,
+Carbon monoxide,CO,core,
+Methane,CH4,core,alkane
+Ethane,C2H6,organic,alkane
+Propane,C3H8,organic,alkane
+Butane,C4H10,organic,alkane
+Pentane,C5H12,organic,alkane
+Hexane,C6H14,organic,alkane
+Ethene,C2H4,organic,alkene
+Propene,C3H6,organic,alkene
+Ethyne,C2H2,organic,alkyne (acetylene)
+Benzene,C6H6,organic,aromatic
+Toluene,C7H8,organic,aromatic
+Xylene,C8H10,organic,aromatic (isomers)
+Phenol,C6H6O,organic,
+Aniline,C6H7N,organic,
+Ethanol,C2H6O,organic,alcohol
+Methanol,CH4O,organic,alcohol
+Propan-1-ol,C3H8O,organic,alcohol
+Propan-2-ol,C3H8O,organic,isopropanol
+Ethylene glycol,C2H6O2,organic,
+Glycerol,C3H8O3,organic,
+Acetone,C3H6O,organic,ketone
+Acetaldehyde,C2H4O,organic,aldehyde
+Formaldehyde,CH2O,organic,aldehyde
+Acetic acid,C2H4O2,organic,carboxylic acid
+Formic acid,CH2O2,organic,carboxylic acid
+Propionic acid,C3H6O2,organic,
+Benzoic acid,C7H6O2,organic,
+Lactic acid,C3H6O3,organic,
+Citric acid,C6H8O7,organic,
+Oxalic acid,C2H2O4,organic,
+Urea,CH4N2O,organic,
+Ammonia,NH3,inorganic,
+Hydrazine,N2H4,inorganic,
+Nitric oxide,NO,inorganic,
+Nitrogen dioxide,NO2,inorganic,
+Dinitrogen tetroxide,N2O4,inorganic,
+Nitrous oxide,N2O,inorganic,
+Sulfur dioxide,SO2,inorganic,
+Sulfur trioxide,SO3,inorganic,
+Hydrogen sulfide,H2S,inorganic,
+Sulfuric acid,H2SO4,acid,
+Sulfurous acid,H2SO3,acid,
+Nitric acid,HNO3,acid,
+Nitrous acid,HNO2,acid,
+Hydrochloric acid,HCl,acid,
+Hydrobromic acid,HBr,acid,
+Hydroiodic acid,HI,acid,
+Hydrofluoric acid,HF,acid,
+Phosphoric acid,H3PO4,acid,
+Carbonic acid,H2CO3,acid,
+Perchloric acid,HClO4,acid,
+Chloric acid,HClO3,acid,
+Chlorous acid,HClO2,acid,
+Hypochlorous acid,HClO,acid,
+Sodium hydroxide,NaOH,base,
+Potassium hydroxide,KOH,base,
+Calcium hydroxide,Ca(OH)2,base,slaked lime
+Magnesium hydroxide,Mg(OH)2,base,milk of magnesia
+Ammonium hydroxide,NH4OH,base,aqueous ammonia (approx)
+Sodium bicarbonate,NaHCO3,salt,baking soda
+Sodium carbonate,Na2CO3,salt,washing soda
+Potassium carbonate,K2CO3,salt,
+Calcium carbonate,CaCO3,salt,limestone/chalk
+Magnesium carbonate,MgCO3,salt,
+Sodium chloride,NaCl,salt,table salt
+Potassium chloride,KCl,salt,
+Calcium chloride,CaCl2,salt,
+Magnesium chloride,MgCl2,salt,
+Aluminum chloride,AlCl3,salt,
+Iron(II) chloride,FeCl2,salt,
+Iron(III) chloride,FeCl3,salt,
+Copper(II) chloride,CuCl2,salt,
+Zinc chloride,ZnCl2,salt,
+Silver nitrate,AgNO3,salt,
+Sodium nitrate,NaNO3,salt,
+Potassium nitrate,KNO3,salt,saltpeter
+Calcium nitrate,Ca(NO3)2,salt,
+Ammonium nitrate,NH4NO3,salt,
+Sodium nitrite,NaNO2,salt,
+Potassium permanganate,KMnO4,salt,
+Sodium permanganate,NaMnO4,salt,
+Sodium sulfate,Na2SO4,salt,
+Potassium sulfate,K2SO4,salt,
+Calcium sulfate,CaSO4,salt,gypsum (anhydrous)
+Copper(II) sulfate,CuSO4,salt,
+Zinc sulfate,ZnSO4,salt,
+Iron(II) sulfate,FeSO4,salt,
+Iron(III) sulfate,Fe2(SO4)3,salt,
+Aluminum sulfate,Al2(SO4)3,salt,
+Sodium sulfite,Na2SO3,salt,
+Sodium thiosulfate,Na2S2O3,salt,
+Sodium sulfide,Na2S,salt,
+Potassium iodide,KI,salt,
+Potassium bromide,KBr,salt,
+Sodium fluoride,NaF,salt,
+Calcium fluoride,CaF2,salt,fluorite
+Ammonium chloride,NH4Cl,salt,
+Ammonium sulfate,(NH4)2SO4,salt,
+Ammonium carbonate,(NH4)2CO3,salt,
+Sodium phosphate,Na3PO4,salt,
+Disodium hydrogen phosphate,Na2HPO4,salt,
+Sodium dihydrogen phosphate,NaH2PO4,salt,
+Calcium phosphate,Ca3(PO4)2,salt,
+Sodium hypochlorite,NaClO,salt,bleach (active)
+Sodium chlorite,NaClO2,salt,
+Sodium chlorate,NaClO3,salt,
+Sodium perchlorate,NaClO4,salt,
+Calcium hypochlorite,Ca(ClO)2,salt,pool chlorine
+Sodium acetate,CH3COONa,salt,
+Potassium acetate,CH3COOK,salt,
+Calcium acetate,C4H6CaO4,salt,
+Sodium citrate,Na3C6H5O7,salt,
+Sodium oxalate,Na2C2O4,salt,
+Calcium oxalate,CaC2O4,salt,
+Sodium benzoate,C7H5NaO2,salt,
+Sodium formate,HCOONa,salt,
+Potassium formate,HCOOK,salt,
+Sodium cyanide,NaCN,salt,highly toxic (label)
+Potassium cyanide,KCN,salt,highly toxic (label)
+Carbon tetrachloride,CCl4,organic,
+Chloroform,CHCl3,organic,
+Dichloromethane,CH2Cl2,organic,
+Acetonitrile,C2H3N,organic,
+Dimethyl sulfoxide,C2H6OS,organic,DMSO
+Dimethylformamide,C3H7NO,organic,DMF
+Diethyl ether,C4H10O,organic,
+Ethyl acetate,C4H8O2,organic,
+Methyl acetate,C3H6O2,organic,
+Acetamide,C2H5NO,organic,
+Glycine,C2H5NO2,biochem,amino acid
+Alanine,C3H7NO2,biochem,amino acid
+Glucose,C6H12O6,biochem,sugar
+Fructose,C6H12O6,biochem,sugar (isomer)
+Sucrose,C12H22O11,biochem,table sugar
+Lactose,C12H22O11,biochem,
+Starch,(C6H10O5)n,biochem,polymer (approx)
+Cellulose,(C6H10O5)n,biochem,polymer (approx)
+Sodium glutamate,C5H8NO4Na,biochem,MSG
+Caffeine,C8H10N4O2,biochem,
+Aspirin,C9H8O4,biochem,acetylsalicylic acid
+Acetaminophen,C8H9NO2,biochem,paracetamol
+Ibuprofen,C13H18O2,biochem,
+Vitamin C,C6H8O6,biochem,ascorbic acid
+Sodium ascorbate,C6H7NaO6,biochem,
+Calcium carbonate (chalk),CaCO3,salt,duplicate acceptable for pedagogy
+Silicon dioxide,SiO2,inorganic,quartz/glass
+Sodium silicate,Na2SiO3,salt,water glass
+Calcium oxide,CaO,inorganic,quicklime
+Calcium hydroxide (limewater),Ca(OH)2,base,duplicate acceptable for pedagogy
+Aluminum oxide,Al2O3,inorganic,alumina
+Iron(III) oxide,Fe2O3,inorganic,rust
+Iron(II,III) oxide,Fe3O4,inorganic,magnetite
+Copper(II) oxide,CuO,inorganic,
+Copper(I) oxide,Cu2O,inorganic,
+Zinc oxide,ZnO,inorganic,
+Magnesium oxide,MgO,inorganic,
+Sodium oxide,Na2O,inorganic,
+Potassium oxide,K2O,inorganic,
+Aluminum hydroxide,Al(OH)3,base,
+Sodium borate,Na2B4O7·10H2O,salt,borax (hydrated)
+Boric acid,H3BO3,acid,
+Sodium bromate,NaBrO3,salt,
+Potassium bromate,KBrO3,salt,
+Sodium iodate,NaIO3,salt,
+Potassium iodate,KIO3,salt,
+Sodium chromate,Na2CrO4,salt,
+Sodium dichromate,Na2Cr2O7,salt,toxic (label)
+Calcium nitrate (fertilizer),Ca(NO3)2,salt,duplicate acceptable for pedagogy
+Potassium phosphate,K3PO4,salt,
+Sodium metabisulfite,Na2S2O5,salt,
+Sodium bisulfite,NaHSO3,salt,
+Sodium bisulfate,NaHSO4,salt,
+Sodium peroxide,Na2O2,inorganic,
+Sodium azide,NaN3,salt,toxic (label)
+Ammonium bicarbonate,NH4HCO3,salt,
+Ammonium phosphate,(NH4)3PO4,salt,
+Sodium hydrogen carbonate,NaHCO3,salt,duplicate acceptable for pedagogy
+Calcium bicarbonate,Ca(HCO3)2,salt,
+Magnesium sulfate,MgSO4,salt,Epsom salt (anhydrous)
+Sodium bromide,NaBr,salt,
+Sodium iodide,NaI,salt,
+Potassium iodide (iodized salt additive),KI,salt,duplicate acceptable
+Sodium thiosulfate pentahydrate,Na2S2O3·5H2O,salt,hydrated
+Copper(II) sulfate pentahydrate,CuSO4·5H2O,salt,hydrated
+Sodium sulfate decahydrate,Na2SO4·10H2O,salt,Glauber's salt
+Magnesium sulfate heptahydrate,MgSO4·7H2O,salt,hydrated
+Calcium chloride dihydrate,CaCl2·2H2O,salt,hydrated
