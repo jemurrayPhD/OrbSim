@@ -31,7 +31,7 @@ def connect() -> sqlite3.Connection:
 def query_compounds_by_elements(
     required_counts: dict[int, int],
     limit: int = 200,
-    exact: bool = False,
+    ignore_counts: bool = False,
 ) -> list[dict]:
     if not required_counts:
         return []
@@ -39,20 +39,15 @@ def query_compounds_by_elements(
     placeholders = ",".join("?" for _ in element_ids)
     having_clauses = []
     having_params: list[object] = []
-    comparator = "=" if exact else ">="
+    comparator = ">="
     for atomic_number, count in required_counts.items():
+        required = 1 if ignore_counts else count
         having_clauses.append(
             f"SUM(CASE WHEN ce.atomic_number = ? AND ce.count {comparator} ? THEN 1 ELSE 0 END) = 1"
         )
-        having_params.extend([atomic_number, count])
+        having_params.extend([atomic_number, required])
     having_sql = " AND ".join(having_clauses)
 
-    exact_clause = ""
-    if exact:
-        exact_clause = (
-            f"AND NOT EXISTS (SELECT 1 FROM compound_elements ce2 "
-            f"WHERE ce2.cid = c.cid AND ce2.atomic_number NOT IN ({placeholders}))"
-        )
     query = f"""
         SELECT
             c.cid,
@@ -64,7 +59,6 @@ def query_compounds_by_elements(
         FROM compounds c
         JOIN compound_elements ce ON c.cid = ce.cid
         WHERE ce.atomic_number IN ({placeholders})
-        {exact_clause}
         GROUP BY c.cid
         HAVING {having_sql}
         ORDER BY c.is_seed DESC, c.name ASC

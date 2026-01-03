@@ -56,25 +56,11 @@
        </property>
        <layout class="QVBoxLayout" name="recipeLayout">
         <item>
-         <layout class="QHBoxLayout" name="filterLayout">
-          <item>
-           <widget class="QRadioButton" name="compatibleRadio">
-            <property name="text">
-             <string>Compatible</string>
-            </property>
-            <property name="checked">
-             <bool>true</bool>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <widget class="QRadioButton" name="exactRadio">
-            <property name="text">
-             <string>Exact match</string>
-            </property>
-           </widget>
-          </item>
-         </layout>
+         <widget class="QCheckBox" name="ignoreCountsCheckBox">
+          <property name="text">
+           <string>Ignore counts (match element types only)</string>
+          </property>
+         </widget>
         </item>
         <item>
          <widget class="QLineEdit" name="recipeSearchLineEdit">
@@ -114,13 +100,13 @@
       </widget>
      </item>
      <item>
-      <widget class="QGroupBox" name="previewGroup">
+      <widget class="QGroupBox" name="dataGroup">
        <property name="title">
-        <string>Preview</string>
+        <string>Compound Data</string>
        </property>
-       <layout class="QVBoxLayout" name="previewLayout">
+       <layout class="QVBoxLayout" name="dataLayout">
         <item>
-         <widget class="QWidget" name="previewPlaceholder"/>
+         <widget class="QWidget" name="dataPlaceholder"/>
         </item>
        </layout>
       </widget>

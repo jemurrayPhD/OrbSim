@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 import math
 
-from PySide6 import QtCore, QtGui, QtWidgets
+from PySide6 import QtCore, QtGui, QtSvg, QtWidgets
 
 
 @dataclass
@@ -19,8 +19,8 @@ class AnnotationCanvas(QtWidgets.QGraphicsView):
         self.setScene(self._scene)
         self._scene.addPixmap(pixmap)
         self._current_tool = ToolState("arrow")
-        self._current_color = QtGui.QColor("#f97316")
-        self._font_size = 14
+        self._current_color = QtGui.QColor("#000000")
+        self._font_size = 10
         self._start_pos: QtCore.QPointF | None = None
         self._active_item: QtWidgets.QGraphicsItem | None = None
         self.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
@@ -54,14 +54,14 @@ class AnnotationCanvas(QtWidgets.QGraphicsView):
                 self.insert_text("Text")
                 return
             if tool == "line":
-                pen = QtGui.QPen(self._current_color, 2)
+                pen = QtGui.QPen(self._current_color, 1)
                 line = QtWidgets.QGraphicsLineItem(QtCore.QLineF(self._start_pos, self._start_pos))
                 line.setPen(pen)
                 self._scene.addItem(line)
                 self._active_item = line
                 return
             if tool == "arrow":
-                pen = QtGui.QPen(self._current_color, 2)
+                pen = QtGui.QPen(self._current_color, 1)
                 line = QtWidgets.QGraphicsLineItem(QtCore.QLineF(self._start_pos, self._start_pos))
                 line.setPen(pen)
                 self._scene.addItem(line)
@@ -71,7 +71,7 @@ class AnnotationCanvas(QtWidgets.QGraphicsView):
                 brush = QtGui.QBrush(QtGui.QColor(self._current_color).lighter(150))
                 brush.setStyle(QtCore.Qt.BrushStyle.Dense4Pattern)
                 rect = QtWidgets.QGraphicsRectItem(QtCore.QRectF(self._start_pos, self._start_pos))
-                rect.setPen(QtGui.QPen(self._current_color, 2))
+                rect.setPen(QtGui.QPen(self._current_color, 1))
                 rect.setBrush(brush)
                 self._scene.addItem(rect)
                 self._active_item = rect
@@ -153,40 +153,78 @@ class AnnotationEditorWindow(QtWidgets.QMainWindow):
         toolbar.setMovable(False)
         self.addToolBar(toolbar)
 
-        def add_tool(name: str, label: str) -> None:
-            action = QtGui.QAction(label, self)
-            action.triggered.connect(lambda: self.canvas.set_tool(name))
-            toolbar.addAction(action)
-
-        add_tool("text", "Text")
-        add_tool("arrow", "Arrow")
-        add_tool("line", "Line")
-        add_tool("highlight", "Highlight rectangle")
-
-        color_action = QtGui.QAction("Color", self)
-        color_action.triggered.connect(self._pick_color)
-        toolbar.addAction(color_action)
+        toolbar.addWidget(QtWidgets.QLabel("Save/Copy"))
+        export_action = QtGui.QAction("Export", self)
+        export_action.triggered.connect(self._export_image)
+        toolbar.addAction(export_action)
+        copy_action = QtGui.QAction("Copy", self)
+        copy_action.triggered.connect(self._copy_image)
+        toolbar.addAction(copy_action)
 
         toolbar.addSeparator()
-        toolbar.addWidget(QtWidgets.QLabel("Font size"))
-        font_size = QtWidgets.QSpinBox()
-        font_size.setRange(8, 48)
-        font_size.setValue(14)
-        font_size.valueChanged.connect(self.canvas.set_font_size)
-        toolbar.addWidget(font_size)
+        toolbar.addWidget(QtWidgets.QLabel("Undo/Redo"))
+        toolbar.addAction(QtGui.QAction("Undo", self))
+        toolbar.addAction(QtGui.QAction("Redo", self))
 
-        date_action = QtGui.QAction("Insert date/time", self)
+        toolbar.addSeparator()
+        toolbar.addWidget(QtWidgets.QLabel("Select/Pan/Zoom"))
+        pan_action = QtGui.QAction("Pan", self)
+        pan_action.triggered.connect(lambda: self.canvas.setDragMode(QtWidgets.QGraphicsView.DragMode.ScrollHandDrag))
+        toolbar.addAction(pan_action)
+        zoom_in = QtGui.QAction("Zoom +", self)
+        zoom_in.triggered.connect(lambda: self.canvas.scale(1.1, 1.1))
+        toolbar.addAction(zoom_in)
+        zoom_out = QtGui.QAction("Zoom −", self)
+        zoom_out.triggered.connect(lambda: self.canvas.scale(0.9, 0.9))
+        toolbar.addAction(zoom_out)
+
+        toolbar.addSeparator()
+        toolbar.addWidget(QtWidgets.QLabel("Text/Labels"))
+        text_action = QtGui.QAction("Text", self)
+        text_action.triggered.connect(lambda: self.canvas.set_tool("text"))
+        toolbar.addAction(text_action)
+        panel_action = QtGui.QAction("Panel label", self)
+        panel_action.triggered.connect(lambda: self.canvas.insert_text("Panel"))\n        toolbar.addAction(panel_action)
+
+        toolbar.addSeparator()
+        toolbar.addWidget(QtWidgets.QLabel("Lines/Arrows"))
+        line_action = QtGui.QAction("Line", self)
+        line_action.triggered.connect(lambda: self.canvas.set_tool("line"))
+        toolbar.addAction(line_action)
+        arrow_action = QtGui.QAction("Arrow", self)
+        arrow_action.triggered.connect(lambda: self.canvas.set_tool("arrow"))
+        toolbar.addAction(arrow_action)
+
+        toolbar.addSeparator()
+        toolbar.addWidget(QtWidgets.QLabel("Shapes/Highlights"))
+        highlight_action = QtGui.QAction("Highlight", self)
+        highlight_action.triggered.connect(lambda: self.canvas.set_tool("highlight"))
+        toolbar.addAction(highlight_action)
+
+        toolbar.addSeparator()
+        toolbar.addWidget(QtWidgets.QLabel("Scale/Time"))
+        scale_action = QtGui.QAction("Scale bar", self)
+        scale_action.triggered.connect(lambda: self.canvas.insert_text("Scale bar"))
+        toolbar.addAction(scale_action)
+        date_action = QtGui.QAction("Timestamp", self)
         date_action.triggered.connect(self._insert_datetime)
         toolbar.addAction(date_action)
 
         toolbar.addSeparator()
-        export_action = QtGui.QAction("Export image", self)
-        export_action.triggered.connect(self._export_image)
-        toolbar.addAction(export_action)
+        toolbar.addWidget(QtWidgets.QLabel("Alignment/Snapping"))
+        toolbar.addAction(QtGui.QAction("Align", self))
+        toolbar.addAction(QtGui.QAction("Snap", self))
 
-        copy_action = QtGui.QAction("Copy to clipboard", self)
-        copy_action.triggered.connect(self._copy_image)
-        toolbar.addAction(copy_action)
+        toolbar.addSeparator()
+        color_action = QtGui.QAction("Color", self)
+        color_action.triggered.connect(self._pick_color)
+        toolbar.addAction(color_action)
+        toolbar.addWidget(QtWidgets.QLabel("Font size"))
+        font_size = QtWidgets.QSpinBox()
+        font_size.setRange(8, 48)
+        font_size.setValue(10)
+        font_size.valueChanged.connect(self.canvas.set_font_size)
+        toolbar.addWidget(font_size)
 
     def _pick_color(self) -> None:
         color = QtWidgets.QColorDialog.getColor(self.canvas._current_color, self, "Select annotation color")
@@ -198,10 +236,33 @@ class AnnotationEditorWindow(QtWidgets.QMainWindow):
         self.canvas.insert_text(now)
 
     def _export_image(self) -> None:
-        path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Export annotated image", "", "PNG (*.png)")
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self,
+            "Export annotated image",
+            "",
+            "PNG (*.png);;SVG (*.svg);;PDF (*.pdf)",
+        )
         if not path:
             return
-        if not path.lower().endswith(".png"):
+        lower = path.lower()
+        if lower.endswith(".svg"):
+            generator = QtSvg.QSvgGenerator()
+            generator.setFileName(path)
+            image = self.canvas.render_to_image()
+            generator.setSize(image.size())
+            painter = QtGui.QPainter(generator)
+            self.canvas.scene().render(painter)
+            painter.end()
+            return
+        if lower.endswith(".pdf"):
+            pdf = QtGui.QPdfWriter(path)
+            image = self.canvas.render_to_image()
+            pdf.setPageSize(QtGui.QPageSize(image.size()))
+            painter = QtGui.QPainter(pdf)
+            painter.drawImage(0, 0, image)
+            painter.end()
+            return
+        if not lower.endswith(".png"):
             path += ".png"
         image = self.canvas.render_to_image()
         image.save(path)

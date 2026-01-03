@@ -21,7 +21,7 @@ class OrbSimMainWindow(QtWidgets.QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("OrbSim")
-        self.setMinimumSize(1200, 720)
+        self.setMinimumSize(1280, 800)
         self._settings = QtCore.QSettings("OrbSim", "OrbSim")
         self._theme_name = self._settings.value("theme", "Fluent Light")
 
@@ -37,16 +37,8 @@ class OrbSimMainWindow(QtWidgets.QMainWindow):
         self.tabs.addTab(AtomicOrbitalsTab(), "Atomic Orbitals")
         self.tabs.addTab(BondingOrbitalsTab(), "Bonding Orbitals")
         self.tabs.addTab(CompoundBuilderTab(), "Compound Builder")
-        self._annotation_layers: dict[QtWidgets.QWidget, OrbSimMainWindow.AnnotationLayer] = {}
-        self._annotation_toolbox: OrbSimMainWindow.AnnotationToolbox | None = None
         self._annotation_editors: list[AnnotationEditorWindow] = []
-        for i in range(self.tabs.count()):
-            self._annotation_layer_for_tab(self.tabs.widget(i))
         self.tabs.currentChanged.connect(self._on_tab_changed)
-        # initialize show text/state
-        self._show_annotations_act.setChecked(True)
-        self._show_annotations_act.setText("Hide annotations")
-        self._refresh_annotation_layers()
 
         self.statusBar().showMessage("Drag elements into the visualization pane to begin.")
         self.apply_theme(self._theme_name)
@@ -60,7 +52,7 @@ class OrbSimMainWindow(QtWidgets.QMainWindow):
         super().closeEvent(event)
 
     def _build_toolbar(self) -> None:
-        toolbar = QtWidgets.QToolBar("Export/Annotations")
+        toolbar = QtWidgets.QToolBar("Export/Copy")
         toolbar.setMovable(False)
         self.addToolBar(QtCore.Qt.ToolBarArea.TopToolBarArea, toolbar)
         print_act = QtGui.QAction("Print", self)
@@ -83,57 +75,6 @@ class OrbSimMainWindow(QtWidgets.QMainWindow):
         export_btn.setPopupMode(QtWidgets.QToolButton.ToolButtonPopupMode.InstantPopup)
         toolbar.addWidget(export_btn)
 
-        annotate_act = QtGui.QAction("Annotation mode", self)
-        annotate_act.setIcon(qta.icon("fa5s.edit"))
-        annotate_act.setCheckable(True)
-        annotate_act.toggled.connect(self._toggle_annotation_mode)
-        show_act = QtGui.QAction("Show annotations", self)
-        show_act.setIcon(qta.icon("fa5s.eye"))
-        show_act.setCheckable(True)
-        show_act.setChecked(False)
-        show_act.toggled.connect(self._toggle_annotation_visibility)
-        clear_act = QtGui.QAction("Clear annotations", self)
-        clear_act.setIcon(qta.icon("fa5s.trash"))
-        clear_act.triggered.connect(self._clear_annotations)
-        save_act = QtGui.QAction("Save annotations", self)
-        save_act.setIcon(qta.icon("fa5s.save"))
-        save_act.triggered.connect(self._save_annotations)
-        load_act = QtGui.QAction("Load annotations", self)
-        load_act.setIcon(qta.icon("fa5s.folder-open"))
-        load_act.triggered.connect(self._load_annotations)
-        undo_act = QtGui.QAction("Undo annotation", self)
-        undo_act.setIcon(qta.icon("fa5s.undo"))
-        undo_act.triggered.connect(self._undo_annotation)
-        redo_act = QtGui.QAction("Redo annotation", self)
-        redo_act.setIcon(qta.icon("fa5s.redo"))
-        redo_act.triggered.connect(self._redo_annotation)
-        copy_ann_act = QtGui.QAction("Copy annotation", self)
-        copy_ann_act.setIcon(qta.icon("fa5s.copy"))
-        copy_ann_act.triggered.connect(self._copy_annotation)
-        paste_ann_act = QtGui.QAction("Paste annotation", self)
-        paste_ann_act.setIcon(qta.icon("fa5s.paste"))
-        paste_ann_act.triggered.connect(self._paste_annotation)
-
-        anno_btn = QtWidgets.QToolButton()
-        anno_btn.setText("Annotations")
-        anno_menu = QtWidgets.QMenu(anno_btn)
-        anno_menu.addAction(annotate_act)
-        anno_menu.addAction(show_act)
-        anno_menu.addSeparator()
-        anno_menu.addAction(undo_act)
-        anno_menu.addAction(redo_act)
-        anno_menu.addAction(copy_ann_act)
-        anno_menu.addAction(paste_ann_act)
-        anno_menu.addSeparator()
-        anno_menu.addAction(clear_act)
-        anno_menu.addAction(save_act)
-        anno_menu.addAction(load_act)
-        anno_btn.setMenu(anno_menu)
-        anno_btn.setPopupMode(QtWidgets.QToolButton.ToolButtonPopupMode.InstantPopup)
-        toolbar.addWidget(anno_btn)
-
-        self._annotate_act = annotate_act
-        self._show_annotations_act = show_act
 
     def _build_menus(self) -> None:
         view_menu = self.menuBar().addMenu("View")
@@ -165,7 +106,6 @@ class OrbSimMainWindow(QtWidgets.QMainWindow):
                     widget.apply_theme(tokens)
                 for widget in tab.findChildren(PeriodicTableWidget):
                     widget.apply_theme(tokens)
-        self._refresh_annotation_layers()
 
     @property
     def theme_name(self) -> str:
@@ -173,17 +113,7 @@ class OrbSimMainWindow(QtWidgets.QMainWindow):
 
     def _grab_current_view(self) -> QtGui.QPixmap:
         target: QtWidgets.QWidget = self.tabs.currentWidget() if getattr(self, "tabs", None) else self
-        base = target.grab()
-        layer = self._annotation_layer_for_tab(target, create=False)
-        if layer and layer.has_annotations() and layer.isVisible():
-            composed = QtGui.QPixmap(base.size())
-            composed.fill(QtCore.Qt.transparent)
-            painter = QtGui.QPainter(composed)
-            painter.drawPixmap(0, 0, base)
-            layer.render(painter, QtCore.QPoint(), QtGui.QRegion())
-            painter.end()
-            return composed
-        return base
+        return target.grab()
 
     def _copy_current_view(self) -> None:
         decision = self._prompt_annotation_action()
@@ -248,12 +178,12 @@ class OrbSimMainWindow(QtWidgets.QMainWindow):
             pixmap.save(path, fmt.upper())
 
     def _on_tab_changed(self, index: int) -> None:
-        self._refresh_annotation_layers()
+        return
 
     def _prompt_annotation_action(self) -> str:
         dialog = QtWidgets.QMessageBox(self)
-        dialog.setWindowTitle("Annotate current view?")
-        dialog.setText("Annotate current view?")
+        dialog.setWindowTitle("Annotate current view before exporting?")
+        dialog.setText("Annotate current view before exporting?")
         annotate_btn = dialog.addButton("Annotate", QtWidgets.QMessageBox.ButtonRole.AcceptRole)
         export_btn = dialog.addButton("Export without annotation", QtWidgets.QMessageBox.ButtonRole.DestructiveRole)
         cancel_btn = dialog.addButton("Cancel", QtWidgets.QMessageBox.ButtonRole.RejectRole)

@@ -414,6 +414,8 @@ class DropPlotter(QtWidgets.QFrame):
 
 
 class ElementTileWidget(QtWidgets.QFrame):
+    element_clicked = QtCore.Signal(int)
+
     def __init__(self, element: Element, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
         self.element = element
@@ -423,16 +425,21 @@ class ElementTileWidget(QtWidgets.QFrame):
         self.setFrameShadow(QtWidgets.QFrame.Shadow.Raised)
         self.setCursor(QtCore.Qt.CursorShape.OpenHandCursor)
         self.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
+        self._drag_start_pos: QtCore.QPoint | None = None
+        self._dragging = False
 
-        layout = QtWidgets.QVBoxLayout(self)
-        layout.setContentsMargins(4, 4, 4, 4)
+        layout = QtWidgets.QGridLayout(self)
+        layout.setContentsMargins(6, 6, 6, 6)
         layout.setSpacing(2)
+        self.number_label = QtWidgets.QLabel(str(element.atomic_number))
+        self.number_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignTop)
         self.symbol_label = QtWidgets.QLabel(element.symbol)
         self.symbol_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        self.number_label = QtWidgets.QLabel(str(element.atomic_number))
-        self.number_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(self.symbol_label)
-        layout.addWidget(self.number_label)
+        self.name_label = QtWidgets.QLabel(element.name)
+        self.name_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignBottom)
+        layout.addWidget(self.number_label, 0, 0, 1, 1)
+        layout.addWidget(self.symbol_label, 1, 0, 1, 2)
+        layout.addWidget(self.name_label, 2, 0, 1, 2)
 
     def apply_theme(self, tokens: dict) -> None:
         self._theme_tokens = tokens
@@ -451,12 +458,38 @@ class ElementTileWidget(QtWidgets.QFrame):
         )
         font = self.symbol_label.font()
         font.setBold(True)
+        font.setPointSize(font.pointSize() + 4)
         self.symbol_label.setFont(font)
+        number_font = self.number_label.font()
+        number_font.setPointSize(max(number_font.pointSize() - 1, 7))
+        self.number_label.setFont(number_font)
+        name_font = self.name_label.font()
+        name_font.setPointSize(max(name_font.pointSize() - 2, 7))
+        self.name_label.setFont(name_font)
 
     def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:
         if event.button() == QtCore.Qt.MouseButton.LeftButton:
-            self._start_drag()
+            self._drag_start_pos = event.pos()
+            self._dragging = False
         super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event: QtGui.QMouseEvent) -> None:
+        if (
+            event.buttons() & QtCore.Qt.MouseButton.LeftButton
+            and self._drag_start_pos is not None
+            and (event.pos() - self._drag_start_pos).manhattanLength()
+            > QtWidgets.QApplication.startDragDistance()
+        ):
+            self._dragging = True
+            self._start_drag()
+            self._drag_start_pos = None
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event: QtGui.QMouseEvent) -> None:
+        if event.button() == QtCore.Qt.MouseButton.LeftButton and not self._dragging:
+            self.element_clicked.emit(self.element.atomic_number)
+        self._dragging = False
+        super().mouseReleaseEvent(event)
 
     def _start_drag(self) -> None:
         payload = json.dumps({"Z": self.element.atomic_number, "symbol": self.element.symbol}).encode("utf-8")
@@ -672,6 +705,224 @@ def _element_from_mime(mime: QtCore.QMimeData) -> Element | None:
     return Element(symbol, symbol, atomic_number)
 
 
+
+
+class CraftingTableSlotWidget(QtWidgets.QFrame):
+    slot_changed = QtCore.Signal()
+
+    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setAcceptDrops(True)
+        self.setObjectName("craftingTableSlot")
+        self._theme_tokens: dict | None = None
+        self.atomic_number: int | None = None
+        self.count = 0
+
+        self.symbol_label = QtWidgets.QLabel("")
+        self.symbol_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.symbol_label.setObjectName("craftingSlotSymbol")
+        self.count_label = QtWidgets.QLabel("")
+        self.count_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignBottom)
+        self.count_label.setObjectName("craftingSlotCount")
+
+        self.add_button = QtWidgets.QToolButton()
+        self.add_button.setText("+")
+        self.sub_button = QtWidgets.QToolButton()
+        self.sub_button.setText("−")
+        self.clear_button = QtWidgets.QToolButton()
+        self.clear_button.setText("🗑")
+        self.add_button.clicked.connect(self._increment)
+        self.sub_button.clicked.connect(self._decrement)
+        self.clear_button.clicked.connect(self.clear_slot)
+
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(6, 6, 6, 6)
+        layout.addWidget(self.symbol_label, 1)
+
+        controls = QtWidgets.QHBoxLayout()
+        controls.setContentsMargins(0, 0, 0, 0)
+        controls.addWidget(self.add_button)
+        controls.addWidget(self.sub_button)
+        controls.addWidget(self.clear_button)
+        layout.addLayout(controls)
+
+    def apply_theme(self, tokens: dict) -> None:
+        self._theme_tokens = tokens
+        colors = tokens["colors"]
+        radii = tokens["radii"]
+        self.setStyleSheet(
+            "QFrame#craftingTableSlot {"
+            f"background: {colors['surfaceAlt']};"
+            f"border: 1px solid {colors['border']};"
+            f"border-radius: {radii['sm']}px;"
+            "}"
+            "QFrame#craftingTableSlot:focus {"
+            f"outline: 2px solid {colors['focusRing']};"
+            "}"
+            "QToolButton {"
+            f"background: {colors['surface']};"
+            f"border: 1px solid {colors['border']};"
+            f"border-radius: {radii['sm']}px;"
+            "}"
+            "QLabel#craftingSlotCount {"
+            f"background: {colors['surface']};"
+            f"border: 1px solid {colors['border']};"
+            f"border-radius: {radii['sm']}px;"
+            f"padding: 1px 4px;"
+            "}"
+        )
+        font = self.symbol_label.font()
+        font.setPointSize(font.pointSize() + 6)
+        font.setBold(True)
+        self.symbol_label.setFont(font)
+
+    def set_element(self, atomic_number: int, symbol: str, count: int = 1) -> None:
+        self.atomic_number = atomic_number
+        self.symbol_label.setText(symbol)
+        self.count = max(count, 1)
+        self._update_count()
+        self.slot_changed.emit()
+
+    def clear_slot(self) -> None:
+        self.atomic_number = None
+        self.symbol_label.setText("")
+        self.count = 0
+        self._update_count()
+        self.slot_changed.emit()
+
+    def _increment(self) -> None:
+        if self.atomic_number is None:
+            return
+        self.count += 1
+        self._update_count()
+        self.slot_changed.emit()
+
+    def _decrement(self) -> None:
+        if self.atomic_number is None:
+            return
+        self.count -= 1
+        if self.count <= 0:
+            self.clear_slot()
+            return
+        self._update_count()
+        self.slot_changed.emit()
+
+    def _update_count(self) -> None:
+        self.count_label.setText(f"×{self.count}" if self.count > 0 else "")
+        self.count_label.adjustSize()
+        self.count_label.move(self.width() - self.count_label.width() - 6, self.height() - self.count_label.height() - 6)
+
+    def resizeEvent(self, event: QtGui.QResizeEvent) -> None:
+        super().resizeEvent(event)
+        self._update_count()
+
+    def dragEnterEvent(self, event: QtGui.QDragEnterEvent) -> None:
+        if event.mimeData().hasFormat("application/x-orbsim-element"):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event: QtGui.QDropEvent) -> None:
+        element = _element_from_mime(event.mimeData())
+        if not element:
+            event.ignore()
+            return
+        if self.atomic_number is None:
+            self.set_element(element.atomic_number, element.symbol, 1)
+        elif self.atomic_number == element.atomic_number:
+            self._increment()
+        else:
+            self.set_element(element.atomic_number, element.symbol, 1)
+        event.acceptProposedAction()
+
+
+class CraftingTableWidget(QtWidgets.QWidget):
+    crafting_changed = QtCore.Signal(object)
+
+    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._theme_tokens: dict | None = None
+        self.setObjectName("craftingTable")
+        self.setAcceptDrops(True)
+        layout = QtWidgets.QGridLayout(self)
+        layout.setSpacing(8)
+        layout.setContentsMargins(4, 4, 4, 4)
+        self._slots: list[CraftingTableSlotWidget] = []
+        for row in range(3):
+            for col in range(3):
+                slot = CraftingTableSlotWidget(self)
+                slot.slot_changed.connect(self._emit_change)
+                layout.addWidget(slot, row, col)
+                self._slots.append(slot)
+
+    def apply_theme(self, tokens: dict) -> None:
+        self._theme_tokens = tokens
+        colors = tokens["colors"]
+        self.setStyleSheet(
+            "QWidget#craftingTable {"
+            f"background: {colors['surface']};"
+            f"border: 1px solid {colors['border']};"
+            "}"
+        )
+        for slot in self._slots:
+            slot.apply_theme(tokens)
+
+    def add_element_to_first_empty(self, atomic_number: int, symbol: str) -> None:
+        for slot in self._slots:
+            if slot.atomic_number is None:
+                slot.set_element(atomic_number, symbol, 1)
+                return
+        QtWidgets.QMessageBox.information(self, "Crafting full", "No empty slots available in the 3×3 grid.")
+
+    def set_counts(self, counts: dict[int, int]) -> None:
+        for slot in self._slots:
+            slot.clear_slot()
+        for idx, (atomic_number, count) in enumerate(counts.items()):
+            if idx >= len(self._slots):
+                break
+            symbol = ATOMIC_NUMBER_TO_SYMBOL.get(atomic_number, str(atomic_number))
+            self._slots[idx].set_element(atomic_number, symbol, count)
+        self._emit_change()
+
+    def counts(self) -> dict[int, int]:
+        counts: dict[int, int] = {}
+        for slot in self._slots:
+            if slot.atomic_number is None:
+                continue
+            counts[slot.atomic_number] = counts.get(slot.atomic_number, 0) + slot.count
+        return counts
+
+    def slots_state(self) -> list[dict]:
+        state = []
+        for slot in self._slots:
+            if slot.atomic_number is None:
+                state.append({"atomic_number": None, "count": 0})
+            else:
+                state.append({"atomic_number": slot.atomic_number, "count": slot.count})
+        return state
+
+    def clear(self) -> None:
+        for slot in self._slots:
+            slot.clear_slot()
+        self._emit_change()
+
+    def dragEnterEvent(self, event: QtGui.QDragEnterEvent) -> None:
+        if event.mimeData().hasFormat("application/x-orbsim-element"):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event: QtGui.QDropEvent) -> None:
+        element = _element_from_mime(event.mimeData())
+        if not element:
+            event.ignore()
+            return
+        self.add_element_to_first_empty(element.atomic_number, element.symbol)
+        event.acceptProposedAction()
+
+    def _emit_change(self) -> None:
+        payload = {"counts": self.counts(), "slots": self.slots_state()}
+        self.crafting_changed.emit(payload)
 
 
 class AggregatedCraftingSlotWidget(QtWidgets.QFrame):
@@ -930,23 +1181,60 @@ _PERIODIC_POSITIONS_FULL = {
 }
 
 
-class PeriodicTableInventoryWidget(QtWidgets.QWidget):
+class PeriodicTableInventoryWidget(QtWidgets.QScrollArea):
+    element_clicked = QtCore.Signal(int)
+
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
         self._theme_tokens: dict | None = None
         self._tiles: list[ElementTileWidget] = []
-        self._layout = QtWidgets.QGridLayout(self)
-        self._layout.setContentsMargins(4, 4, 4, 4)
+        self.setWidgetResizable(True)
+        self.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
+
+        self._content = QtWidgets.QWidget()
+        self._layout = QtWidgets.QGridLayout(self._content)
+        self._layout.setContentsMargins(6, 6, 6, 6)
         self._layout.setSpacing(4)
         self._populate()
+        self.setWidget(self._content)
+
+    def _elements_full(self) -> list[dict]:
+        try:
+            from periodic_table_cli.cli import load_data
+        except Exception:
+            return [
+                {"symbol": element.symbol, "name": element.name, "atomic_number": element.atomic_number}
+                for element in ELEMENTS_H_KR
+            ]
+        data = load_data()
+        return data.get("elements", [])
 
     def _populate(self) -> None:
-        for element in ELEMENTS_H_KR:
-            position = _PERIODIC_POSITIONS_FULL.get(element.atomic_number)
-            if position is None:
+        elements = self._elements_full()
+        for element in elements:
+            atomic_number = int(element.get("atomicNumber") or element.get("atomic_number") or 0)
+            symbol = element.get("symbol") or element.get("symbol")
+            name = element.get("name") or element.get("name") or symbol
+            if not atomic_number or not symbol:
                 continue
-            tile = ElementTileWidget(Element(element.symbol, element.name, element.atomic_number), self)
-            row, col = position
+            period = element.get("period")
+            group = element.get("group")
+            if atomic_number in range(57, 72):
+                row = 7
+                col = atomic_number - 57 + 3
+            elif atomic_number in range(89, 104):
+                row = 8
+                col = atomic_number - 89 + 3
+            elif period and group:
+                row = int(period) - 1
+                col = int(group) - 1
+            elif atomic_number in _PERIODIC_POSITIONS_FULL:
+                row, col = _PERIODIC_POSITIONS_FULL[atomic_number]
+            else:
+                continue
+            tile = ElementTileWidget(Element(symbol, name, atomic_number), self._content)
+            tile.setMinimumSize(48, 52)
+            tile.element_clicked.connect(self.element_clicked)
             self._layout.addWidget(tile, row, col)
             self._tiles.append(tile)
 
@@ -954,10 +1242,13 @@ class PeriodicTableInventoryWidget(QtWidgets.QWidget):
         self._theme_tokens = tokens
         colors = tokens["colors"]
         self.setStyleSheet(
-            "QWidget {"
+            "QScrollArea {"
             f"background: {colors['surface']};"
             f"border: 1px solid {colors['border']};"
             "}"
+        )
+        self._content.setStyleSheet(
+            f"background: {colors['surface']};"
         )
         for tile in self._tiles:
             tile.apply_theme(tokens)
