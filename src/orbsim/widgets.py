@@ -16,6 +16,7 @@ from orbsim.chem.elements import (
     is_metal,
     is_nonmetal,
 )
+from orbsim.resources import load_icon
 
 @dataclass(frozen=True)
 class Element:
@@ -428,15 +429,16 @@ class ElementTileWidget(QtWidgets.QFrame):
         self._drag_start_pos: QtCore.QPoint | None = None
         self._dragging = False
 
-        layout = QtWidgets.QGridLayout(self)
+        layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(6, 6, 6, 6)
         layout.setSpacing(2)
         self.symbol_label = QtWidgets.QLabel(element.symbol)
         self.symbol_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.number_label = QtWidgets.QLabel(str(element.atomic_number))
-        self.number_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(self.symbol_label, 0, 0, 1, 2)
-        layout.addWidget(self.number_label, 1, 0, 1, 2)
+        self.number_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignTop)
+        layout.addStretch(1)
+        layout.addWidget(self.symbol_label, 0, QtCore.Qt.AlignmentFlag.AlignCenter)
+        layout.addStretch(1)
 
     def apply_theme(self, tokens: dict) -> None:
         self._theme_tokens = tokens
@@ -461,6 +463,11 @@ class ElementTileWidget(QtWidgets.QFrame):
         number_font.setPointSize(max(number_font.pointSize() - 2, 7))
         number_font.setBold(False)
         self.number_label.setFont(number_font)
+
+    def resizeEvent(self, event: QtGui.QResizeEvent) -> None:
+        super().resizeEvent(event)
+        self.number_label.adjustSize()
+        self.number_label.move(6, 4)
 
     def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:
         if event.button() == QtCore.Qt.MouseButton.LeftButton:
@@ -721,11 +728,20 @@ class CraftingTableSlotWidget(QtWidgets.QFrame):
         self.count_label.setObjectName("craftingSlotCount")
 
         self.add_button = QtWidgets.QToolButton()
-        self.add_button.setText("+")
+        self.add_button.setAutoRaise(True)
+        self.add_button.setIcon(load_icon("plus.svg"))
+        self.add_button.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonIconOnly)
+        self.add_button.setToolTip("Add one")
         self.sub_button = QtWidgets.QToolButton()
-        self.sub_button.setText("−")
+        self.sub_button.setAutoRaise(True)
+        self.sub_button.setIcon(load_icon("minus.svg"))
+        self.sub_button.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonIconOnly)
+        self.sub_button.setToolTip("Remove one")
         self.clear_button = QtWidgets.QToolButton()
-        self.clear_button.setText("🗑")
+        self.clear_button.setAutoRaise(True)
+        self.clear_button.setIcon(load_icon("trash.svg"))
+        self.clear_button.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonIconOnly)
+        self.clear_button.setToolTip("Clear slot")
         self.add_button.clicked.connect(self._increment)
         self.sub_button.clicked.connect(self._decrement)
         self.clear_button.clicked.connect(self.clear_slot)
@@ -755,9 +771,18 @@ class CraftingTableSlotWidget(QtWidgets.QFrame):
             f"outline: 2px solid {colors['focusRing']};"
             "}"
             "QToolButton {"
+            f"color: {colors['text']};"
+            "background: transparent;"
+            "border: 1px solid transparent;"
+            f"border-radius: {radii['sm']}px;"
+            f"padding: {tokens['spacing']['xs']}px;"
+            "}"
+            "QToolButton:hover {"
             f"background: {colors['surface']};"
             f"border: 1px solid {colors['border']};"
-            f"border-radius: {radii['sm']}px;"
+            "}"
+            "QToolButton:focus {"
+            f"border: 1px solid {colors['focusRing']};"
             "}"
             "QLabel#craftingSlotCount {"
             f"background: {colors['surface']};"
@@ -770,6 +795,9 @@ class CraftingTableSlotWidget(QtWidgets.QFrame):
         font.setPointSize(font.pointSize() + 6)
         font.setBold(True)
         self.symbol_label.setFont(font)
+        icon_size = max(12, int(tokens["spacing"]["lg"]))
+        for button in (self.add_button, self.sub_button, self.clear_button):
+            button.setIconSize(QtCore.QSize(icon_size, icon_size))
 
     def set_element(self, atomic_number: int, symbol: str, count: int = 1) -> None:
         self.atomic_number = atomic_number
@@ -1216,10 +1244,10 @@ class PeriodicTableInventoryWidget(QtWidgets.QScrollArea):
             group = element.get("group")
             if atomic_number in range(57, 72):
                 row = 7
-                col = atomic_number - 57 + 3
+                col = atomic_number - 57 + 4
             elif atomic_number in range(89, 104):
                 row = 8
-                col = atomic_number - 89 + 3
+                col = atomic_number - 89 + 4
             elif period and group:
                 row = int(period) - 1
                 col = int(group) - 1
@@ -1232,6 +1260,14 @@ class PeriodicTableInventoryWidget(QtWidgets.QScrollArea):
             tile.element_clicked.connect(self.element_clicked)
             self._layout.addWidget(tile, row, col)
             self._tiles.append(tile)
+        self._add_placeholders()
+
+    def _add_placeholders(self) -> None:
+        for row, label in ((5, "57–71"), (6, "89–103")):
+            placeholder = QtWidgets.QLabel(label)
+            placeholder.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+            placeholder.setObjectName("lanActPlaceholder")
+            self._layout.addWidget(placeholder, row, 2)
 
     def apply_theme(self, tokens: dict) -> None:
         self._theme_tokens = tokens
@@ -1247,6 +1283,10 @@ class PeriodicTableInventoryWidget(QtWidgets.QScrollArea):
         )
         for tile in self._tiles:
             tile.apply_theme(tokens)
+        for placeholder in self._content.findChildren(QtWidgets.QLabel, "lanActPlaceholder"):
+            placeholder.setStyleSheet(
+                f"color: {colors['textMuted']}; border: 1px solid {colors['border']};"
+            )
 
 
 class StructureDiagramWidget(QtWidgets.QLabel):
@@ -1377,18 +1417,16 @@ class CompoundPreviewPane(QtWidgets.QWidget):
         self.pubchem_button = QtWidgets.QPushButton("Open PubChem")
         self.pubchem_button.clicked.connect(self._open_pubchem)
         header_layout.addWidget(self.pubchem_button)
+        header_layout.addStretch()
         layout.addLayout(header_layout)
 
-        self.source_label = QtWidgets.QLabel("Source: PubChem")
-        self.source_label.setOpenExternalLinks(True)
-        self.source_label.setText('<a href="https://pubchem.ncbi.nlm.nih.gov/docs/citation-guidelines">Source: PubChem</a>')
-        header_layout.addWidget(self.source_label)
-
+        top_row = QtWidgets.QHBoxLayout()
         self.structure_widget = StructureDiagramWidget(self)
-        layout.addWidget(self.structure_widget)
+        top_row.addWidget(self.structure_widget, 3)
 
         self.bonding_widget = BondingAndPolarityWidget(self)
-        layout.addWidget(self.bonding_widget)
+        top_row.addWidget(self.bonding_widget, 2)
+        layout.addLayout(top_row)
 
         self.oxidation_label = QtWidgets.QLabel("Oxidation states")
         layout.addWidget(self.oxidation_label)
@@ -1397,8 +1435,15 @@ class CompoundPreviewPane(QtWidgets.QWidget):
 
         self.properties_label = QtWidgets.QLabel("Compound properties")
         layout.addWidget(self.properties_label)
-        self.properties_table = CompoundPropertiesTableWidget(self)
-        layout.addWidget(self.properties_table)
+        self.properties_container = QtWidgets.QWidget(self)
+        properties_layout = QtWidgets.QHBoxLayout(self.properties_container)
+        properties_layout.setContentsMargins(0, 0, 0, 0)
+        properties_layout.setSpacing(8)
+        self.properties_table_left = CompoundPropertiesTableWidget(self.properties_container)
+        self.properties_table_right = CompoundPropertiesTableWidget(self.properties_container)
+        properties_layout.addWidget(self.properties_table_left)
+        properties_layout.addWidget(self.properties_table_right)
+        layout.addWidget(self.properties_container)
 
         self._pubchem_url: str | None = None
 
@@ -1409,7 +1454,8 @@ class CompoundPreviewPane(QtWidgets.QWidget):
         self.structure_widget.apply_theme(tokens)
         self.bonding_widget.apply_theme(tokens)
         self.oxidation_table.apply_theme(tokens)
-        self.properties_table.apply_theme(tokens)
+        self.properties_table_left.apply_theme(tokens)
+        self.properties_table_right.apply_theme(tokens)
 
     def set_compound(self, compound: dict | None) -> None:
         if not compound:
@@ -1417,7 +1463,8 @@ class CompoundPreviewPane(QtWidgets.QWidget):
             self.structure_widget.set_cid(None)
             self.bonding_widget.set_bonding("Bonding: —", "Polarity: —")
             self._populate_table(self.oxidation_table, [])
-            self._populate_table(self.properties_table, [])
+            self._populate_table(self.properties_table_left, [])
+            self._populate_table(self.properties_table_right, [])
             return
         raw_name = compound.get("name") or ""
         name = raw_name.split(";")[0].strip()
@@ -1450,7 +1497,9 @@ class CompoundPreviewPane(QtWidgets.QWidget):
             rows.append(("IUPAC name", iupac))
         if compound.get("smiles"):
             rows.append(("SMILES", compound["smiles"]))
-        self._populate_table(self.properties_table, rows)
+        midpoint = (len(rows) + 1) // 2
+        self._populate_table(self.properties_table_left, rows[:midpoint])
+        self._populate_table(self.properties_table_right, rows[midpoint:])
 
     def _populate_table(self, table: QtWidgets.QTableWidget, rows: list[tuple[str, str]]) -> None:
         table.setRowCount(0)

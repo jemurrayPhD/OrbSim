@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from orbsim.tabs.periodic_table_tab import PeriodicTableTab
 from orbsim.ui.generated.ui_electron_shells import Ui_ElectronShellsTab
+from orbsim.views.electron_shells_view import OrbitalBoxContainer, SubshellGridView
+from orbsim.views.periodic_table_view import BohrViewer
 from periodic_table_cli.cli import load_data
 
 
@@ -34,9 +35,9 @@ class ElectronShellsTab(QtWidgets.QWidget):
         controls.addStretch()
         layout.addLayout(controls)
 
-        self.bohr_view = PeriodicTableTab.BohrViewer()
-        self.subshell_view = self.SubshellGridView(self.bohr_view)
-        self.box_container = self.OrbitalBoxContainer(self.bohr_view)
+        self.bohr_view = BohrViewer()
+        self.subshell_view = SubshellGridView(self.bohr_view)
+        self.box_container = OrbitalBoxContainer(self.bohr_view)
 
         self.config_label = QtWidgets.QLabel()
         self.config_label.setWordWrap(True)
@@ -77,6 +78,9 @@ class ElectronShellsTab(QtWidgets.QWidget):
         )
         for container in getattr(self, "_wrap_containers", []):
             container.setStyleSheet(self._wrap_style)
+        self.bohr_view.apply_theme(tokens)
+        self.subshell_view.apply_theme(tokens)
+        self.box_container.apply_theme(tokens)
 
     def _wrap_with_label(self, title: str, widget: QtWidgets.QWidget) -> QtWidgets.QWidget:
         container = QtWidgets.QWidget()
@@ -184,68 +188,3 @@ class ElectronShellsTab(QtWidgets.QWidget):
         remainder = {k: v for k, v in remainder.items() if v > 0}
         rest = self._config_string(remainder)
         return f"[{ng_symbol}] {rest}" if rest else f"[{ng_symbol}]"
-
-    class SubshellGridView(QtWidgets.QWidget):
-        def __init__(self, bohr_view: "PeriodicTableTab.BohrViewer", parent=None):
-            super().__init__(parent)
-            self.bohr_view = bohr_view
-            self.grid = QtWidgets.QGridLayout(self)
-            self.grid.setAlignment(QtCore.Qt.AlignTop)
-            self.grid.setHorizontalSpacing(10)
-            self.grid.setVerticalSpacing(8)
-            self.setMinimumSize(220, 220)
-
-        def update_view(self, elem: dict, oxidation: int) -> None:
-            while self.grid.count():
-                item = self.grid.takeAt(0)
-                w = item.widget()
-                if w:
-                    w.deleteLater()
-            if not elem:
-                return
-            self.bohr_view.oxidation_state = oxidation
-            shells, subshells = self.bohr_view._shell_counts(elem)
-            l_labels = ["s", "p", "d", "f"]
-            for col, label in enumerate(l_labels):
-                hdr = QtWidgets.QLabel(label)
-                hdr.setAlignment(QtCore.Qt.AlignCenter)
-                hdr.setStyleSheet("font-weight: bold;")
-                self.grid.addWidget(hdr, 0, col + 1)
-            for n in range(1, len(shells) + 1):
-                row_lbl = QtWidgets.QLabel(f"n={n}")
-                row_lbl.setAlignment(QtCore.Qt.AlignCenter)
-                row_lbl.setStyleSheet("")
-                self.grid.addWidget(row_lbl, n, 0)
-                lmax = min(3, n - 1)
-                for l in range(0, lmax + 1):
-                    cap = self.bohr_view._subshell_capacity(l)
-                    filled = min(cap, subshells.get((n, l), 0))
-                    view = self.bohr_view.SubshellMiniWidget(
-                        f"{n}{l_labels[l]}",
-                        filled,
-                        cap,
-                        self.bohr_view._angle_sets().get(l, []),
-                        filled >= cap,
-                        self,
-                    )
-                    self.grid.addWidget(view, n, l + 1)
-            self.updateGeometry()
-
-    class OrbitalBoxContainer(QtWidgets.QWidget):
-        def __init__(self, bohr_view: "PeriodicTableTab.BohrViewer", parent=None):
-            super().__init__(parent)
-            self.bohr_view = bohr_view
-            self.view = PeriodicTableTab.OrbitalBoxView(
-                {}, 0, self.bohr_view._shell_counts, self.bohr_view._subshell_capacity, self
-            )
-            lay = QtWidgets.QVBoxLayout(self)
-            lay.setContentsMargins(0, 0, 0, 0)
-            lay.addWidget(self.view)
-            self.setMinimumSize(240, 240)
-
-        def update_view(self, elem: dict, oxidation: int) -> None:
-            if not elem:
-                return
-            self.view.elem = elem
-            self.view.oxidation = oxidation
-            self.view.update()

@@ -382,13 +382,6 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         three_d_group = QtWidgets.QGroupBox("3D View")
         three_d_layout = QtWidgets.QFormLayout(three_d_group)
 
-        self.symbol_combo = QtWidgets.QComboBox()
-        for sym in sorted(_ATOMIC_NUMBER.keys(), key=lambda s: _ATOMIC_NUMBER[s]):
-            self.symbol_combo.addItem(sym)
-        self.symbol_combo.setCurrentText(self.current_symbol)
-        self.symbol_combo.currentTextChanged.connect(self._update_symbol)
-        three_d_layout.addRow("Element", self.symbol_combo)
-
         self.representation_combo = QtWidgets.QComboBox()
         self.representation_combo.addItem("Surface (iso-probability)", "surface")
         self.representation_combo.addItem("Volume (semi-transparent)", "volume")
@@ -565,29 +558,8 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
 
         layout.addWidget(two_d_group)
 
-        measurement_group = QtWidgets.QGroupBox("Measurements")
-        measure_layout = QtWidgets.QVBoxLayout(measurement_group)
-        self.distance_btn = QtWidgets.QPushButton("Measure distance")
-        self.distance_btn.clicked.connect(self._start_distance_measurement)
-        self.angle_btn = QtWidgets.QPushButton("Measure angle")
-        self.angle_btn.clicked.connect(self._start_angle_measurement)
-        self.clear_measure_btn = QtWidgets.QPushButton("Clear measurements")
-        self.clear_measure_btn.clicked.connect(self._clear_measurements)
-        measure_layout.addWidget(self.distance_btn)
-        measure_layout.addWidget(self.angle_btn)
-        measure_layout.addWidget(self.clear_measure_btn)
-        layout.addWidget(measurement_group)
         layout.addStretch()
         return container
-
-    def _update_symbol_from_element(self, element) -> None:
-        self._update_symbol(element.symbol)
-
-    def _update_symbol(self, symbol: str) -> None:
-        self.current_symbol = symbol
-        default_n, default_l = default_quantum_numbers(symbol)
-        self._set_quantum_numbers(default_n, default_l, 0, trigger_render=False)
-        self._render_orbital()
 
     def _set_quantum_numbers(self, n: int, l: int, m: int, trigger_render: bool = True) -> None:
         n_val = max(int(n), 1)
@@ -837,15 +809,6 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
                 self.plotter.add_light(light)
         except Exception:
             pass
-
-    def _start_distance_measurement(self) -> None:
-        self.plotter_frame.start_distance_measurement()
-
-    def _start_angle_measurement(self) -> None:
-        self.plotter_frame.start_angle_measurement()
-
-    def _clear_measurements(self) -> None:
-        self.plotter_frame.stop_measurements()
 
     def _cache_key(self, n: int, l: int, m: int) -> tuple:
         return (

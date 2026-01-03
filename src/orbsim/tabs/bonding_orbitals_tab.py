@@ -101,7 +101,7 @@ class BondingOrbitalsTab(AtomicOrbitalsTab):
         nucleus_size_layout = QtWidgets.QHBoxLayout()
         nucleus_size_layout.addWidget(QtWidgets.QLabel("Nucleus radius scale"))
         self.nucleus_scale_spin = QtWidgets.QDoubleSpinBox()
-        self.nucleus_scale_spin.setRange(0.2, 3.0)
+        self.nucleus_scale_spin.setRange(0.1, 2.0)
         self.nucleus_scale_spin.setSingleStep(0.05)
         self.nucleus_scale_spin.setValue(self.nucleus_scale)
         self.nucleus_scale_spin.valueChanged.connect(self._set_nucleus_scale)
@@ -584,28 +584,39 @@ class BondingOrbitalsTab(AtomicOrbitalsTab):
     def _nucleus_color(self, symbol: str) -> str:
         return NUCLEUS_COLORS.get(symbol, "#f8fafc")
 
+    def _nucleus_base_radius(self) -> float:
+        bounds = None
+        if self.base_grid is not None:
+            bounds = self.base_grid.bounds
+        if bounds is None and self._hybrid_meta:
+            bounds = self._hybrid_meta.get("bounds")
+        if bounds is None:
+            return 0.12
+        extent = max(bounds[1] - bounds[0], bounds[3] - bounds[2], bounds[5] - bounds[4])
+        return max(extent * 0.02, 0.08)
+
     def _render_nuclei(self) -> None:
         if not self.show_nuclei or not self.orbitals:
             return
+        base_radius = self._nucleus_base_radius()
         for orb in self.orbitals:
             if not orb.visible:
                 continue
-            base_radius = 0.35 + 0.02 * float(np.cbrt(_ATOMIC_NUMBER.get(orb.symbol, 1)))
-            base_radius *= float(max(self.nucleus_scale, 0.05))
+            radius = base_radius * float(max(self.nucleus_scale, 0.05))
             color = self._nucleus_color(orb.symbol)
             offsets = [
                 np.array([0.0, 0.0, 0.0]),
-                np.array([0.2, 0.2, 0.0]) * base_radius,
-                np.array([-0.2, 0.2, 0.0]) * base_radius,
-                np.array([0.2, -0.2, 0.0]) * base_radius,
-                np.array([-0.2, -0.2, 0.0]) * base_radius,
+                np.array([0.2, 0.2, 0.0]) * radius,
+                np.array([-0.2, 0.2, 0.0]) * radius,
+                np.array([0.2, -0.2, 0.0]) * radius,
+                np.array([-0.2, -0.2, 0.0]) * radius,
             ]
             for scale, center_offset in zip([1.0, 0.5, 0.5, 0.5, 0.5], offsets, strict=False):
-                radius = base_radius * scale
+                orb_radius = radius * scale
                 center = orb.position + center_offset
                 try:
                     self.plotter.add_mesh(
-                        pv.Sphere(radius=radius, center=center),
+                        pv.Sphere(radius=orb_radius, center=center),
                         color=color,
                         opacity=1.0,
                         show_scalar_bar=False,
@@ -616,7 +627,7 @@ class BondingOrbitalsTab(AtomicOrbitalsTab):
                     pass
                 try:
                     self.slice_view.add_mesh(
-                        pv.Sphere(radius=radius * 0.7, center=center),
+                        pv.Sphere(radius=orb_radius * 0.7, center=center),
                         color=color,
                         opacity=1.0,
                         show_scalar_bar=False,
