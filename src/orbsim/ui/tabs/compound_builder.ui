@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>CompoundBuilderTab</class>
+ <widget class="QWidget" name="CompoundBuilderTab">
+  <layout class="QVBoxLayout" name="rootLayout">
+   <item>
+    <layout class="QHBoxLayout" name="formulaLayout">
+     <item>
+      <widget class="QLineEdit" name="formulaLineEdit">
+       <property name="placeholderText">
+        <string>Type formula, e.g. H2O</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="addFormulaButton">
+       <property name="text">
+        <string>Add</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="clearButton">
+       <property name="text">
+        <string>Clear</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="mainLayout">
+     <item>
+      <widget class="QGroupBox" name="inventoryGroup">
+       <property name="title">
+        <string>Inventory</string>
+       </property>
+       <layout class="QVBoxLayout" name="inventoryLayout">
+        <item>
+         <widget class="QWidget" name="inventoryPlaceholder"/>
+        </item>
+       </layout>
+      </widget>
+     </item>
+     <item>
+      <widget class="QGroupBox" name="craftingGroup">
+       <property name="title">
+        <string>Crafting</string>
+       </property>
+       <layout class="QVBoxLayout" name="craftingLayout">
+        <item>
+         <widget class="QWidget" name="craftingPlaceholder"/>
+        </item>
+        <item>
+         <widget class="QLabel" name="currentElementsLabel">
+          <property name="text">
+           <string>Current elements: (none)</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </item>
+     <item>
+      <widget class="QGroupBox" name="recipeGroup">
+       <property name="title">
+        <string>Recipe guide</string>
+       </property>
+       <layout class="QVBoxLayout" name="recipeLayout">
+        <item>
+         <widget class="QLineEdit" name="recipeSearchLineEdit">
+          <property name="placeholderText">
+           <string>Filter recipes (optional)</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QListWidget" name="recipeListWidget"/>
+        </item>
+       </layout>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QFrame" name="citationFrame">
+     <layout class="QHBoxLayout" name="citationLayout">
+      <item>
+       <widget class="QLabel" name="citationLabel">
+        <property name="text">
+         <string>Compound data from PubChem (NIH/NLM). Cite: PubChem Citation Guidelines. https://pubchem.ncbi.nlm.nih.gov/docs/citation-guidelines</string>
+        </property>
+        <property name="wordWrap">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="openCitationButton">
+        <property name="text">
+         <string>Open source page</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

@@ -10,6 +10,7 @@ from orbsim.theming.theme_tokens import THEME_TOKENS, get_theme_tokens
 from orbsim.ui.generated.ui_main_window import Ui_MainWindow
 from orbsim.tabs.atomic_orbitals_tab import AtomicOrbitalsTab
 from orbsim.tabs.bonding_orbitals_tab import BondingOrbitalsTab
+from orbsim.tabs.compound_builder_tab import CompoundBuilderTab
 from orbsim.tabs.electron_shells_tab import ElectronShellsTab
 from orbsim.tabs.periodic_table_tab import PeriodicTableTab
 from orbsim.widgets import DropPlotter, PeriodicTableWidget
@@ -29,11 +30,12 @@ class OrbSimMainWindow(QtWidgets.QMainWindow):
         self._build_menus()
 
         self.tabs = self.ui.tabWidget
-        # Order: Periodic Table, Electron Shells, Atomic Orbitals, Bonding Orbitals
+        # Order: Periodic Table, Electron Shells, Atomic Orbitals, Bonding Orbitals, Compound Builder
         self.tabs.addTab(PeriodicTableTab(), "Periodic Table")
         self.tabs.addTab(ElectronShellsTab(), "Electron Shells")
         self.tabs.addTab(AtomicOrbitalsTab(), "Atomic Orbitals")
         self.tabs.addTab(BondingOrbitalsTab(), "Bonding Orbitals")
+        self.tabs.addTab(CompoundBuilderTab(), "Compound Builder")
         self._annotation_layers: dict[QtWidgets.QWidget, OrbSimMainWindow.AnnotationLayer] = {}
         self._annotation_toolbox: OrbSimMainWindow.AnnotationToolbox | None = None
         for i in range(self.tabs.count()):
