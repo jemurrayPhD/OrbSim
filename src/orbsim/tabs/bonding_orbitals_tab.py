@@ -308,18 +308,6 @@ class BondingOrbitalsTab(AtomicOrbitalsTab):
 
         layout.addWidget(two_d_group)
 
-        measurement_group = QtWidgets.QGroupBox("Measurements")
-        measure_layout = QtWidgets.QVBoxLayout(measurement_group)
-        self.distance_btn = QtWidgets.QPushButton("Measure distance")
-        self.distance_btn.clicked.connect(self._start_distance_measurement)
-        self.angle_btn = QtWidgets.QPushButton("Measure angle")
-        self.angle_btn.clicked.connect(self._start_angle_measurement)
-        self.clear_measure_btn = QtWidgets.QPushButton("Clear measurements")
-        self.clear_measure_btn.clicked.connect(self._clear_measurements)
-        measure_layout.addWidget(self.distance_btn)
-        measure_layout.addWidget(self.angle_btn)
-        measure_layout.addWidget(self.clear_measure_btn)
-        layout.addWidget(measurement_group)
         layout.addStretch()
         self._refresh_orbital_table()
         return container
