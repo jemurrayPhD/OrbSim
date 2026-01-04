@@ -334,6 +334,10 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         self._scale_bar_margin = (24, 24)
         self._last_slice_bounds: tuple[float, float, float, float, float, float] | None = None
 
+        self.opacity_scale = 1.0
+        self.opacity_low = 5
+        self.opacity_high = 95
+        self.clip_invert = False
         self.controls = self._build_controls()
         self._set_slice_normal(self.slice_normal, update_controls=True, trigger_render=False)
         self.slice_offset = 0.0
@@ -345,10 +349,6 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         self.pref_show_grid = True
         self.pref_show_slice_plane = True
         self.pref_slice_plane_opacity = 0.35
-        self.opacity_scale = 1.0
-        self.opacity_low = 5
-        self.opacity_high = 95
-        self.clip_invert = False
 
         self.controls_scroll = self.ui.controlsScroll
         self.controls_scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
