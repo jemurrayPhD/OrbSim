@@ -14,7 +14,7 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 
-from orbsim.chem.elements import SYMBOL_TO_ELEMENT
+from orbsim.chem.elements import get_atomic_number
 from orbsim.chem.formula_parser import parse_formula
 
 
@@ -261,10 +261,10 @@ def build_db(
             continue
         element_counts = []
         for symbol, count in formula_counts.items():
-            element = SYMBOL_TO_ELEMENT.get(symbol)
-            if not element:
+            atomic_number = get_atomic_number(symbol)
+            if not atomic_number:
                 continue
-            element_counts.append((element.atomic_number, count))
+            element_counts.append((atomic_number, count))
 
         data_json = json.dumps(
             {
