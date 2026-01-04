@@ -1134,12 +1134,11 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         mapper.SetInputData(dataset)
         mapper.SetBlendModeToComposite()
         planes = self._build_clipping_planes()
-        if planes and planes.GetNumberOfPlanes() > 0:
+        if planes and planes.GetNumberOfItems() > 0:
             mapper.SetClippingPlanes(planes)
         color_tf = self._build_color_transfer(self.current_cmap, vmin, vmax)
         opacity_tf = self._build_opacity_transfer(values, vmin, vmax)
         color_tf.SetRange(vmin, vmax)
-        opacity_tf.SetRange(vmin, vmax)
         prop = vtk.vtkVolumeProperty()
         prop.SetColor(color_tf)
         prop.SetScalarOpacity(opacity_tf)
