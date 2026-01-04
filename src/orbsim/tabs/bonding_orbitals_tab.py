@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import math
 import sys
 
@@ -670,12 +671,30 @@ class BondingOrbitalsTab(AtomicOrbitalsTab):
         clip_bounds = self.clip_box_bounds if self.clip_mode == "box" else None
 
         prob_arr = np.asarray(volume_field.dataset.get_array("probability"))
-        vmax = float(np.nanmax(prob_arr)) if prob_arr.size else 1.0
-        if vmax <= 0:
-            vmax = 1.0
-        clim = (0.0, vmax)
+        prob_scaled = prob_arr
+        if prob_arr.size:
+            prob_raw = np.nan_to_num(prob_arr, nan=0.0, posinf=0.0, neginf=0.0)
+            vmin = float(np.percentile(prob_raw, 1.0))
+            vmax = float(np.percentile(prob_raw, 99.5))
+            if vmax <= vmin:
+                vmax = vmin + 1e-6
+            prob_clip = np.clip(prob_raw, vmin, vmax)
+            prob_scaled = (prob_clip - vmin) / max(vmax - vmin, 1e-12)
+            prob_scaled = np.nan_to_num(prob_scaled, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)
+            volume_field.dataset["density_raw"] = prob_raw.astype(np.float32)
+            volume_field.dataset["density_render"] = prob_scaled
+            logging.getLogger(__name__).debug(
+                "Volume scalars: raw dtype=%s range=(%.4g, %.4g) render dtype=%s range=(%.4g, %.4g)",
+                prob_raw.dtype,
+                float(np.min(prob_raw)),
+                float(np.max(prob_raw)),
+                prob_scaled.dtype,
+                float(np.min(prob_scaled)),
+                float(np.max(prob_scaled)),
+            )
+        clim = (0.0, 1.0) if prob_arr.size else (0.0, 1.0)
         label = "Electron Density"
-        self._add_volume_render(volume_field, prob_arr)
+        self._add_volume_render(volume_field, prob_scaled)
         main_title = f"{key.title()} hybrid ({len(self.orbitals)} orbitals)"
         self.plotter.add_text(
             main_title,

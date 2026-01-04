@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import logging
 import math
 import os
 import shutil
@@ -335,8 +336,8 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         self._last_slice_bounds: tuple[float, float, float, float, float, float] | None = None
 
         self.opacity_scale = 1.0
-        self.opacity_low = 5
-        self.opacity_high = 95
+        self.opacity_low = 0.05
+        self.opacity_high = 0.95
         self.clip_invert = False
         self.controls = self._build_controls()
         self._set_slice_normal(self.slice_normal, update_controls=True, trigger_render=False)
@@ -423,13 +424,13 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
 
         self.opacity_low_slider = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
         self.opacity_low_slider.setRange(0, 95)
-        self.opacity_low_slider.setValue(self.opacity_low)
+        self.opacity_low_slider.setValue(int(self.opacity_low * 100))
         self.opacity_low_slider.valueChanged.connect(self._set_opacity_low)
         three_d_layout.addRow("Low cutoff (%)", self.opacity_low_slider)
 
         self.opacity_high_slider = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
         self.opacity_high_slider.setRange(5, 100)
-        self.opacity_high_slider.setValue(self.opacity_high)
+        self.opacity_high_slider.setValue(int(self.opacity_high * 100))
         self.opacity_high_slider.valueChanged.connect(self._set_opacity_high)
         three_d_layout.addRow("High cutoff (%)", self.opacity_high_slider)
 
@@ -644,17 +645,17 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         self._render_orbital()
 
     def _set_opacity_low(self, value: int) -> None:
-        self.opacity_low = int(value)
+        self.opacity_low = value / 100.0
         if self.opacity_low >= self.opacity_high:
-            self.opacity_low = max(0, self.opacity_high - 5)
-            self.opacity_low_slider.setValue(self.opacity_low)
+            self.opacity_low = max(0.0, self.opacity_high - 0.05)
+            self.opacity_low_slider.setValue(int(self.opacity_low * 100))
         self._render_orbital()
 
     def _set_opacity_high(self, value: int) -> None:
-        self.opacity_high = int(value)
+        self.opacity_high = value / 100.0
         if self.opacity_high <= self.opacity_low:
-            self.opacity_high = min(100, self.opacity_low + 5)
-            self.opacity_high_slider.setValue(self.opacity_high)
+            self.opacity_high = min(1.0, self.opacity_low + 0.05)
+            self.opacity_high_slider.setValue(int(self.opacity_high * 100))
         self._render_orbital()
 
     def _set_contour_count(self, value: int) -> None:
@@ -925,16 +926,28 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         if not fields:
             return
         prob_arr = np.asarray(vol_field.dataset.get_array("probability"))
-        vmax = float(np.nanmax(prob_arr)) if prob_arr.size else 1.0
-        vmin = float(np.nanmin(prob_arr)) if prob_arr.size else 0.0
-        if vmax <= vmin:
-            vmax = vmin + 1e-6
         prob_scaled = prob_arr
         if prob_arr.size:
-            prob_scaled = (prob_arr - vmin) / (vmax - vmin)
-            prob_scaled = np.nan_to_num(prob_scaled, nan=0.0, posinf=0.0, neginf=0.0)
-            vol_field.dataset["probability_scaled"] = prob_scaled
-        clim = (0.0, 1.0) if prob_arr.size else (0.0, vmax)
+            prob_raw = np.nan_to_num(prob_arr, nan=0.0, posinf=0.0, neginf=0.0)
+            vmin = float(np.percentile(prob_raw, 1.0))
+            vmax = float(np.percentile(prob_raw, 99.5))
+            if vmax <= vmin:
+                vmax = vmin + 1e-6
+            prob_clip = np.clip(prob_raw, vmin, vmax)
+            prob_scaled = (prob_clip - vmin) / max(vmax - vmin, 1e-12)
+            prob_scaled = np.nan_to_num(prob_scaled, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)
+            vol_field.dataset["density_raw"] = prob_raw.astype(np.float32)
+            vol_field.dataset["density_render"] = prob_scaled
+            logging.getLogger(__name__).debug(
+                "Volume scalars: raw dtype=%s range=(%.4g, %.4g) render dtype=%s range=(%.4g, %.4g)",
+                prob_raw.dtype,
+                float(np.min(prob_raw)),
+                float(np.max(prob_raw)),
+                prob_scaled.dtype,
+                float(np.min(prob_scaled)),
+                float(np.max(prob_scaled)),
+            )
+        clim = (0.0, 1.0) if prob_arr.size else (0.0, 1.0)
         label = "Electron Density"
         self._add_volume_render(vol_field, prob_scaled)
         main_title = f"{self.current_symbol} n={self.current_n}, l={self.current_l}, m={self.current_m}"
@@ -1099,10 +1112,10 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
             opacity_tf.AddPoint(vmin, 0.0)
             opacity_tf.AddPoint(vmax, min(1.0, self.opacity_scale))
             return opacity_tf
-        low_val = float(np.percentile(values, self.opacity_low))
-        high_val = float(np.percentile(values, self.opacity_high))
+        low_val = float(self.opacity_low)
+        high_val = float(self.opacity_high)
         if high_val <= low_val:
-            high_val = low_val + 1e-6
+            high_val = min(1.0, low_val + 0.05)
         opacity_tf.AddPoint(vmin, 0.0)
         opacity_tf.AddPoint(low_val, 0.0)
         opacity_tf.AddPoint(high_val, min(1.0, 0.6 * self.opacity_scale))
@@ -1132,9 +1145,9 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
 
     def _add_volume_render(self, volume_field, values: np.ndarray) -> None:
         dataset = volume_field.dataset
-        if "probability_scaled" in dataset.array_names:
+        if "density_render" in dataset.array_names:
             try:
-                dataset.set_active_scalars("probability_scaled")
+                dataset.set_active_scalars("density_render")
             except Exception:
                 pass
         vmin = float(np.nanmin(values)) if values.size else 0.0
@@ -1147,16 +1160,23 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         planes = self._build_clipping_planes()
         if planes and planes.GetNumberOfItems() > 0:
             mapper.SetClippingPlanes(planes)
-        color_tf = self._build_color_transfer(self.current_cmap, vmin, vmax)
-        opacity_tf = self._build_opacity_transfer(values, vmin, vmax)
-        color_tf.SetRange(vmin, vmax)
+        color_tf = self._build_color_transfer(self.current_cmap, 0.0, 1.0)
+        opacity_tf = self._build_opacity_transfer(values, 0.0, 1.0)
+        color_tf.SetRange(0.0, 1.0)
         prop = vtk.vtkVolumeProperty()
         prop.SetColor(color_tf)
         prop.SetScalarOpacity(opacity_tf)
         prop.SetInterpolationTypeToLinear()
         prop.ShadeOn()
         volume = vtk.vtkVolume()
-        volume.SetMapper(mapper)
+        try:
+            volume.SetMapper(mapper)
+        except Exception:
+            fallback = vtk.vtkFixedPointVolumeRayCastMapper()
+            fallback.SetInputData(dataset)
+            if planes and planes.GetNumberOfItems() > 0:
+                fallback.SetClippingPlanes(planes)
+            volume.SetMapper(fallback)
         volume.SetProperty(prop)
         self.plotter.renderer.AddVolume(volume)
 
@@ -1357,7 +1377,7 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
             prob_vals = _ensure_array("probability")
             prob_scaled_vals = None
             try:
-                prob_scaled_vals = _ensure_array("probability_scaled")
+                prob_scaled_vals = _ensure_array("density_render")
             except Exception:
                 prob_scaled_vals = None
             amp_vals = _ensure_array("amplitude")
