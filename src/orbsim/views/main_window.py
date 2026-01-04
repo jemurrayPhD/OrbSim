@@ -25,6 +25,7 @@ class OrbSimMainWindow(QtWidgets.QMainWindow):
         self._settings = QtCore.QSettings("OrbSim", "OrbSim")
         self._theme_name = self._settings.value("theme", "Fluent Light")
         self._theme_manager = get_theme_manager()
+        self._theme_manager.theme_changed.connect(self._on_theme_changed)
 
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
@@ -93,7 +94,9 @@ class OrbSimMainWindow(QtWidgets.QMainWindow):
     def apply_theme(self, theme_name: str) -> None:
         self._theme_name = theme_name
         self._settings.setValue("theme", theme_name)
-        tokens = self._theme_manager.set_theme(theme_name)
+        self._theme_manager.set_theme(theme_name)
+
+    def _on_theme_changed(self, tokens: dict) -> None:
         app = QtWidgets.QApplication.instance()
         if app:
             apply_theme_tokens(app, tokens)
