@@ -32,7 +32,10 @@ def get_compound_count() -> int:
     if not db_exists():
         return 0
     with connect() as connection:
-        row = connection.execute("SELECT COUNT(*) AS count FROM compounds").fetchone()
+        try:
+            row = connection.execute("SELECT COUNT(*) AS count FROM compounds").fetchone()
+        except sqlite3.OperationalError:
+            return 0
     return int(row["count"] if row else 0)
 
 
@@ -40,10 +43,13 @@ def get_last_built() -> str | None:
     if not db_exists():
         return None
     with connect() as connection:
-        row = connection.execute(
-            "SELECT value FROM metadata WHERE key = ?",
-            ("last_built",),
-        ).fetchone()
+        try:
+            row = connection.execute(
+                "SELECT value FROM metadata WHERE key = ?",
+                ("last_built",),
+            ).fetchone()
+        except sqlite3.OperationalError:
+            return None
     return row["value"] if row else None
 
 
