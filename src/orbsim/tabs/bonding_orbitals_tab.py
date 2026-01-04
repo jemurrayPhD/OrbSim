@@ -684,42 +684,11 @@ class BondingOrbitalsTab(AtomicOrbitalsTab):
         clip_bounds = self.clip_box_bounds if self.clip_mode == "box" else None
 
         prob_arr = np.asarray(volume_field.dataset.get_array("probability"))
-        prob_scaled = prob_arr
-        if prob_arr.size:
-            nan_count = int(np.isnan(prob_arr).sum())
-            prob_raw = np.nan_to_num(prob_arr, nan=0.0, posinf=0.0, neginf=0.0)
-            vmin = float(np.percentile(prob_raw, 1.0))
-            vmax = float(np.percentile(prob_raw, 99.5))
-            if vmax <= vmin:
-                vmax = vmin + 1e-6
-            prob_clip = np.clip(prob_raw, vmin, vmax)
-            prob_scaled = (prob_clip - vmin) / max(vmax - vmin, 1e-12)
-            prob_scaled = np.nan_to_num(prob_scaled, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)
-            volume_field.dataset["density_raw"] = prob_raw.astype(np.float32)
-            volume_field.dataset["density_render"] = prob_scaled
-            try:
-                volume_field.dataset.active_scalars_name = "density_render"
-            except Exception:
-                pass
-            logging.getLogger(__name__).debug(
-                "Volume scalars: raw dtype=%s range=(%.4g, %.4g) p1/p50/p99=(%.4g, %.4g, %.4g) nan=%d "
-                "render dtype=%s range=(%.4g, %.4g)",
-                prob_raw.dtype,
-                float(np.min(prob_raw)),
-                float(np.max(prob_raw)),
-                vmin,
-                float(np.percentile(prob_raw, 50.0)),
-                float(np.percentile(prob_raw, 99.0)),
-                nan_count,
-                prob_scaled.dtype,
-                float(np.min(prob_scaled)),
-                float(np.max(prob_scaled)),
-            )
+        prob_scaled = self._prepare_volume_scalars(volume_field.dataset, prob_arr)
         clim = (0.0, 1.0) if prob_arr.size else (0.0, 1.0)
         label = "Electron Density"
         self._add_volume_render(volume_field, prob_scaled)
-        if self._volume_bounds:
-            logging.getLogger(__name__).debug("Volume bounds: %s", self._volume_bounds)
+        self._log_volume_bounds()
         try:
             self.plotter.reset_camera()
             self.plotter.camera.zoom(1.1)
