@@ -1133,7 +1133,6 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         mapper = vtk.vtkSmartVolumeMapper()
         mapper.SetInputData(dataset)
         mapper.SetBlendModeToComposite()
-        mapper.SetScalarRange(vmin, vmax)
         planes = self._build_clipping_planes()
         if planes and planes.GetNumberOfItems() > 0:
             mapper.SetClippingPlanes(planes)
