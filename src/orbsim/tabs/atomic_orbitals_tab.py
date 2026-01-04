@@ -287,6 +287,7 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
             self.plotter_frame.colorbar.setFixedWidth(0)
         except Exception:
             pass
+        self._wrap_viewport_frame(self.plotter_frame)
         self.plotter = self.plotter_frame.plotter
         self.slicing_controller = SlicingController(self.plotter)
         self.slicing_controller.slice_changed.connect(self._on_slice_widget_changed)
@@ -307,6 +308,7 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         except Exception:
             pass
         self.slice_container = self.ui.sliceContainer
+        self._wrap_viewport_frame(self.slice_container)
         slice_layout = QtWidgets.QVBoxLayout(self.slice_container)
         slice_layout.setContentsMargins(0, 0, 0, 0)
         slice_layout.addWidget(self.slice_view)
@@ -1610,6 +1612,22 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
     def _autoscale(self) -> None:
         self.plotter.reset_camera()
         self.camera_initialized = True
+
+    def _wrap_viewport_frame(self, widget: QtWidgets.QWidget) -> None:
+        parent_layout = widget.parentWidget().layout() if widget.parentWidget() else None
+        if not parent_layout:
+            return
+        index = parent_layout.indexOf(widget)
+        if index < 0:
+            return
+        parent_layout.takeAt(index)
+        frame = QtWidgets.QFrame(widget.parentWidget())
+        frame.setObjectName("minecraftViewportFrame")
+        frame_layout = QtWidgets.QVBoxLayout(frame)
+        frame_layout.setContentsMargins(6, 6, 6, 6)
+        widget.setParent(frame)
+        frame_layout.addWidget(widget)
+        parent_layout.insertWidget(index, frame)
 
     def _open_preferences(self) -> None:
         dialog = QtWidgets.QDialog(self)

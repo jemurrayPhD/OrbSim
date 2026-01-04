@@ -4,6 +4,7 @@ import math
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
+from orbsim.theming.theme_manager import get_theme_manager
 
 def _contrast_text(base: QtGui.QColor, light: QtGui.QColor, dark: QtGui.QColor) -> QtGui.QColor:
     luminance = (0.299 * base.red() + 0.587 * base.green() + 0.114 * base.blue()) / 255
@@ -46,12 +47,14 @@ class ElementTileButton(QtWidgets.QAbstractButton):
         self._border_color = QtGui.QColor("#cbd5e1")
         self._focus_color = QtGui.QColor("#0ea5e9")
         self._font_point_size = 10
+        self._border_width = 1
         self.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Expanding)
 
     def set_theme(self, colors: dict, font_point_size: int) -> None:
         self._border_color = QtGui.QColor(colors.get("border", "#cbd5e1"))
         self._focus_color = QtGui.QColor(colors.get("focusRing", colors.get("accent", "#0ea5e9")))
         self._font_point_size = font_point_size
+        self._border_width = max(1, int(colors.get("borderWidth", 1))) if isinstance(colors, dict) else 1
         self.update()
 
     def set_tile_color(self, base_hex: str, text_hex: str | None = None, colors: dict | None = None) -> None:
@@ -81,7 +84,7 @@ class ElementTileButton(QtWidgets.QAbstractButton):
         highlight = QtGui.QColor(base).lighter(112)
         shadow = QtGui.QColor(base).darker(112)
 
-        painter.setPen(QtGui.QPen(self._border_color, 1))
+        painter.setPen(QtGui.QPen(self._border_color, self._border_width))
         painter.setBrush(QtGui.QBrush(base))
         painter.drawRoundedRect(rect, radius, radius)
 
@@ -94,6 +97,16 @@ class ElementTileButton(QtWidgets.QAbstractButton):
         painter.setPen(QtGui.QPen(shadow, 1))
         painter.drawLine(chamfer_rect.bottomLeft(), chamfer_rect.bottomRight())
         painter.drawLine(chamfer_rect.topRight(), chamfer_rect.bottomRight())
+
+        manager = get_theme_manager()
+        tile_texture = manager.texture_path("slot")
+        if tile_texture:
+            pix = QtGui.QPixmap(tile_texture)
+            if not pix.isNull():
+                painter.save()
+                painter.setOpacity(0.2)
+                painter.drawPixmap(rect, pix)
+                painter.restore()
 
         if self.hasFocus() or self.isChecked():
             painter.setPen(QtGui.QPen(self._focus_color, 2))

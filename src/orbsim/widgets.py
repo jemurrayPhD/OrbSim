@@ -10,6 +10,7 @@ from PySide6 import QtCore, QtGui, QtNetwork, QtWidgets
 from pyvistaqt import QtInteractor
 
 from orbsim.chem.elements import get_atomic_number, get_element, get_name, get_symbol
+from orbsim.theming.theme_manager import get_theme_manager
 from orbsim.resources import load_icon
 
 @dataclass(frozen=True)
@@ -433,6 +434,7 @@ class ElementTileWidget(QtWidgets.QFrame):
             "textMuted": "#4b5563",
             "focusRing": "#0ea5e9",
         }
+        self._border_thickness = 1
         self._show_atomic_number = True
         self._count = 0
         self._show_count_badge = False
@@ -449,6 +451,7 @@ class ElementTileWidget(QtWidgets.QFrame):
         self._theme_tokens = tokens
         colors = tokens["colors"]
         self._theme_colors.update(colors)
+        self._border_thickness = int(tokens.get("radii", {}).get("sm", 1)) if tokens else 1
         self.update()
 
     def set_show_atomic_number(self, show: bool) -> None:
@@ -486,7 +489,7 @@ class ElementTileWidget(QtWidgets.QFrame):
             base = QtGui.QColor(self._theme_colors["surfaceAlt"])
             highlight = base.lighter(112)
             shadow = base.darker(112)
-            painter.setPen(QtGui.QPen(QtGui.QColor(self._theme_colors["border"]), 1))
+            painter.setPen(QtGui.QPen(QtGui.QColor(self._theme_colors["border"]), self._border_thickness))
             painter.setBrush(QtGui.QBrush(base))
             painter.drawRoundedRect(rect, radius, radius)
             chamfer_rect = rect.adjusted(1, 1, -1, -1)
@@ -496,6 +499,16 @@ class ElementTileWidget(QtWidgets.QFrame):
             painter.setPen(QtGui.QPen(shadow, 1))
             painter.drawLine(chamfer_rect.bottomLeft(), chamfer_rect.bottomRight())
             painter.drawLine(chamfer_rect.topRight(), chamfer_rect.bottomRight())
+
+            manager = get_theme_manager()
+            slot_texture = manager.texture_path("slot")
+            if slot_texture:
+                pix = QtGui.QPixmap(slot_texture)
+                if not pix.isNull():
+                    painter.save()
+                    painter.setOpacity(0.2)
+                    painter.drawPixmap(rect, pix)
+                    painter.restore()
 
             if self.hasFocus():
                 painter.setPen(QtGui.QPen(QtGui.QColor(self._theme_colors["focusRing"]), 2))

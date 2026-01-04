@@ -1,0 +1,20 @@
+{
+  "name": "Minecraft Classic",
+  "mode": "light",
+  "colors": {
+    "bg": "#c6c6c6",
+    "surface": "#b0b0b0",
+    "surfaceAlt": "#9a9a9a",
+    "text": "#1f1f1f",
+    "textMuted": "#3b3b3b",
+    "border": "#303030",
+    "accent": "#5a9bd4",
+    "accentHover": "#6bb5ff",
+    "focusRing": "#ffd34d",
+    "borderWidth": 2
+  },
+  "radii": {"sm": 2, "md": 3, "lg": 4},
+  "spacing": {"xs": 4, "sm": 6, "md": 10, "lg": 14},
+  "font": {"baseSize": 10, "titleSize": 12, "pixelHeadings": false},
+  "assets": {}
+}

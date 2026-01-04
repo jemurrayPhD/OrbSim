@@ -6,7 +6,7 @@ import qtawesome as qta
 from PySide6 import QtCore, QtGui, QtPrintSupport, QtWidgets
 
 from orbsim.theming.apply_theme import apply_theme as apply_theme_tokens
-from orbsim.theming.theme_tokens import THEME_TOKENS, get_theme_tokens
+from orbsim.theming.theme_manager import apply_skin, get_theme_manager
 from orbsim.ui.generated.ui_main_window import Ui_MainWindow
 from orbsim.tabs.atomic_orbitals_tab import AtomicOrbitalsTab
 from orbsim.tabs.bonding_orbitals_tab import BondingOrbitalsTab
@@ -24,6 +24,7 @@ class OrbSimMainWindow(QtWidgets.QMainWindow):
         self.setMinimumSize(1280, 800)
         self._settings = QtCore.QSettings("OrbSim", "OrbSim")
         self._theme_name = self._settings.value("theme", "Fluent Light")
+        self._theme_manager = get_theme_manager()
 
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
@@ -81,7 +82,7 @@ class OrbSimMainWindow(QtWidgets.QMainWindow):
         theme_menu = view_menu.addMenu("Theme")
         theme_group = QtGui.QActionGroup(self)
         theme_group.setExclusive(True)
-        for name in THEME_TOKENS.keys():
+        for name in self._theme_manager.available_themes():
             action = QtGui.QAction(name, self)
             action.setCheckable(True)
             action.setChecked(name == self._theme_name)
@@ -92,10 +93,11 @@ class OrbSimMainWindow(QtWidgets.QMainWindow):
     def apply_theme(self, theme_name: str) -> None:
         self._theme_name = theme_name
         self._settings.setValue("theme", theme_name)
-        tokens = get_theme_tokens(theme_name)
+        tokens = self._theme_manager.set_theme(theme_name)
         app = QtWidgets.QApplication.instance()
         if app:
             apply_theme_tokens(app, tokens)
+            apply_skin(app, tokens)
         for tab_index in range(self.tabs.count()):
             tab = self.tabs.widget(tab_index)
             apply = getattr(tab, "apply_theme", None)
@@ -201,7 +203,7 @@ class OrbSimMainWindow(QtWidgets.QMainWindow):
         pixmap = self._grab_current_view()
         editor = AnnotationEditorWindow(pixmap, self)
         editor.setAttribute(QtCore.Qt.WidgetAttribute.WA_DeleteOnClose, True)
-        tokens = get_theme_tokens(self._theme_name)
+        tokens = self._theme_manager.tokens()
         editor.apply_theme(tokens)
         editor.show()
         self._annotation_editors.append(editor)
