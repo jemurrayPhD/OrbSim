@@ -44,6 +44,8 @@ class CompoundBuilderTab(QtWidgets.QWidget):
         self.ui.recipeSection.setMinimumSize(320, 320)
         self.ui.dataSection.setMinimumSize(360, 320)
         self.ui.inventorySection.setMinimumHeight(260)
+        self.ui.craftingLayout.setSpacing(10)
+        self.ui.currentElementsLabel.setContentsMargins(0, 6, 0, 0)
         self.upper_splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal, self)
         for section in (self.ui.craftingSection, self.ui.recipeSection, self.ui.dataSection):
             self.ui.upperLayout.removeWidget(section)
@@ -82,6 +84,10 @@ class CompoundBuilderTab(QtWidgets.QWidget):
             "font-weight: 600;"
             f"font-size: {font['titleSize']}px;"
             f"padding-bottom: {tokens['spacing']['xs']}px;"
+            "}"
+            "QLabel#currentElementsLabel {"
+            f"color: {colors['text']};"
+            f"padding-top: {tokens['spacing']['sm']}px;"
             "}"
             "QLineEdit, QListWidget {"
             f"background: {colors['surface']};"

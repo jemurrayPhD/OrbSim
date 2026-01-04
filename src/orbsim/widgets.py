@@ -490,15 +490,19 @@ class ElementTileWidget(QtWidgets.QFrame):
             highlight = base.lighter(112)
             shadow = base.darker(112)
             painter.setPen(QtGui.QPen(QtGui.QColor(self._theme_colors["border"]), self._border_thickness))
-            painter.setBrush(QtGui.QBrush(base))
-            painter.drawRoundedRect(rect, radius, radius)
-            chamfer_rect = rect.adjusted(1, 1, -1, -1)
-            painter.setPen(QtGui.QPen(highlight, 1))
-            painter.drawLine(chamfer_rect.topLeft(), chamfer_rect.topRight())
-            painter.drawLine(chamfer_rect.topLeft(), chamfer_rect.bottomLeft())
-            painter.setPen(QtGui.QPen(shadow, 1))
-            painter.drawLine(chamfer_rect.bottomLeft(), chamfer_rect.bottomRight())
-            painter.drawLine(chamfer_rect.topRight(), chamfer_rect.bottomRight())
+            if self.element.atomic_number <= 0:
+                painter.setBrush(QtCore.Qt.NoBrush)
+                painter.drawRoundedRect(rect, radius, radius)
+            else:
+                painter.setBrush(QtGui.QBrush(base))
+                painter.drawRoundedRect(rect, radius, radius)
+                chamfer_rect = rect.adjusted(1, 1, -1, -1)
+                painter.setPen(QtGui.QPen(highlight, 1))
+                painter.drawLine(chamfer_rect.topLeft(), chamfer_rect.topRight())
+                painter.drawLine(chamfer_rect.topLeft(), chamfer_rect.bottomLeft())
+                painter.setPen(QtGui.QPen(shadow, 1))
+                painter.drawLine(chamfer_rect.bottomLeft(), chamfer_rect.bottomRight())
+                painter.drawLine(chamfer_rect.topRight(), chamfer_rect.bottomRight())
 
             manager = get_theme_manager()
             slot_texture = manager.texture_path("slot")
@@ -514,16 +518,17 @@ class ElementTileWidget(QtWidgets.QFrame):
                 painter.setPen(QtGui.QPen(QtGui.QColor(self._theme_colors["focusRing"]), 2))
                 painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), radius, radius)
 
-            symbol = get_symbol(self.element.atomic_number)
-            text_color = QtGui.QColor(self._theme_colors["text"])
-            painter.setPen(text_color)
-            font = painter.font()
-            font.setBold(True)
-            font.setPointSize(max(font.pointSize() + 4, 10))
-            painter.setFont(font)
-            painter.drawText(rect, QtCore.Qt.AlignmentFlag.AlignCenter, symbol)
+            if self.element.atomic_number > 0:
+                symbol = get_symbol(self.element.atomic_number)
+                text_color = QtGui.QColor(self._theme_colors["text"])
+                painter.setPen(text_color)
+                font = painter.font()
+                font.setBold(True)
+                font.setPointSize(max(font.pointSize() + 4, 10))
+                painter.setFont(font)
+                painter.drawText(rect, QtCore.Qt.AlignmentFlag.AlignCenter, symbol)
 
-            if self._show_atomic_number:
+            if self._show_atomic_number and self.element.atomic_number > 0:
                 small_font = painter.font()
                 small_font.setBold(False)
                 small_font.setPointSize(max(small_font.pointSize() - 4, 7))
@@ -1692,9 +1697,11 @@ class CompoundPreviewPane(QtWidgets.QWidget):
         self.synonyms_copy_button.setEnabled(True)
 
     @staticmethod
-    def _clean_synonyms(values: list[str]) -> list[str]:
+    def _clean_synonyms(values: list[str] | str) -> list[str]:
         cleaned: list[str] = []
         seen = set()
+        if isinstance(values, str):
+            values = [item.strip() for item in values.replace("|", ";").split(";") if item.strip()]
         for value in values:
             text = str(value).strip()
             if not text or len(text) > 80:
