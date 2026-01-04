@@ -1044,10 +1044,10 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
             self._autoscale()
             self.camera_initialized = True
         else:
-        try:
-            self.plotter.render()
-        except Exception as exc:
-            print(f"Render error: {exc}", file=sys.stderr)
+            try:
+                self.plotter.render()
+            except Exception as exc:
+                print(f"Render error: {exc}", file=sys.stderr)
         if self.volume_renderer_mode == "auto" and not self._auto_volume_fallback_attempted:
             if self._last_volume_mapper_mode == "gpu" and self._volume_render_seems_blank():
                 self._auto_volume_fallback_attempted = True
