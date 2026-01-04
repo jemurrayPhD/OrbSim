@@ -195,7 +195,7 @@ class CompoundBuilderTab(QtWidgets.QWidget):
             display = compound_db.format_compound_display(result)
             primary = display["primary_name"]
             formula_display = display["formula_display"] or result["formula"]
-            label = f\"{primary} — {formula_display}\"
+            label = f"{primary} — {formula_display}"
             item = QtWidgets.QListWidgetItem(label)
             item.setData(QtCore.Qt.ItemDataRole.UserRole, result["cid"])
             self.ui.recipeListWidget.addItem(item)
