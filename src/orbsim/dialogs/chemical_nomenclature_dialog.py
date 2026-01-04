@@ -14,6 +14,11 @@ class ChemicalNomenclatureDialog(QtWidgets.QDialog):
         self.setMinimumSize(760, 560)
         self._pool = load_practice_pool()
         self._current_entry: dict | None = None
+        self._score_correct = 0
+        self._score_incorrect = 0
+        self._attempts = 0
+        self._max_attempts = 2
+        self._awaiting_next = False
         self._build_ui()
         self._load_tutorial()
         self._new_prompt()
@@ -113,6 +118,14 @@ class ChemicalNomenclatureDialog(QtWidgets.QDialog):
         self.card.setFrameShape(QtWidgets.QFrame.Shape.StyledPanel)
         self.card.setObjectName("practiceCard")
         card_layout = QtWidgets.QVBoxLayout(self.card)
+        score_row = QtWidgets.QHBoxLayout()
+        self.score_label = QtWidgets.QLabel("Score: 0/0 (0%)")
+        score_row.addWidget(self.score_label)
+        score_row.addStretch()
+        self.reset_score_button = QtWidgets.QPushButton("Reset score")
+        self.reset_score_button.clicked.connect(self._reset_score)
+        score_row.addWidget(self.reset_score_button)
+        card_layout.addLayout(score_row)
         self.prompt_label = QtWidgets.QLabel("—")
         prompt_font = self.prompt_label.font()
         prompt_font.setPointSize(prompt_font.pointSize() + 4)
@@ -122,7 +135,7 @@ class ChemicalNomenclatureDialog(QtWidgets.QDialog):
         card_layout.addWidget(self.prompt_label)
 
         self.answer_input = QtWidgets.QLineEdit()
-        self.answer_input.returnPressed.connect(self._check_answer)
+        self.answer_input.returnPressed.connect(self._handle_enter)
         card_layout.addWidget(self.answer_input)
 
         button_row = QtWidgets.QHBoxLayout()
@@ -138,6 +151,7 @@ class ChemicalNomenclatureDialog(QtWidgets.QDialog):
         button_row.addStretch()
         self.allow_retries = QtWidgets.QCheckBox("Allow unlimited retries")
         self.allow_retries.setChecked(True)
+        self.allow_retries.stateChanged.connect(self._sync_attempts)
         button_row.addWidget(self.allow_retries)
         card_layout.addLayout(button_row)
 
@@ -239,6 +253,8 @@ class ChemicalNomenclatureDialog(QtWidgets.QDialog):
         self.check_button.setEnabled(True)
         self.reveal_button.setEnabled(True)
         self.hint_label.setText("")
+        self._attempts = 0
+        self._awaiting_next = False
         self._animate_card(self._neutral_color, self._neutral_color)
         self.answer_input.setFocus()
 
@@ -247,6 +263,9 @@ class ChemicalNomenclatureDialog(QtWidgets.QDialog):
 
     def _check_answer(self) -> None:
         if not self._current_entry:
+            return
+        if self._awaiting_next:
+            self._new_prompt()
             return
         mode = self.mode_combo.currentText()
         user = self._normalize(self.answer_input.text())
@@ -259,13 +278,22 @@ class ChemicalNomenclatureDialog(QtWidgets.QDialog):
         if correct:
             self.hint_label.setText("Correct!")
             self._animate_card(QtGui.QColor("#22c55e"), self._neutral_color)
+            self._score_correct += 1
+            self._awaiting_next = True
+            self._update_score_label()
             self.answer_input.setFocus()
         else:
+            self._attempts += 1
             hint = self._current_entry.get("hint", "Try again.")
             self.hint_label.setText(f"Incorrect. {hint}")
             self._animate_card(QtGui.QColor("#ef4444"), self._neutral_color)
-            if not self.allow_retries.isChecked():
+            if not self.allow_retries.isChecked() and self._attempts >= self._max_attempts:
+                self._score_incorrect += 1
+                self._awaiting_next = True
+                self._update_score_label()
                 self.answer_input.setEnabled(False)
+            else:
+                self.answer_input.setFocus()
 
     def _reveal_answer(self) -> None:
         if not self._current_entry:
@@ -278,6 +306,10 @@ class ChemicalNomenclatureDialog(QtWidgets.QDialog):
         hint = self._current_entry.get("hint", "")
         self.hint_label.setText(f"Answer: {answer}. {hint}")
         self._animate_reveal()
+        if not self._awaiting_next:
+            self._score_incorrect += 1
+            self._awaiting_next = True
+            self._update_score_label()
 
     def _setup_reveal_effect(self) -> None:
         self._reveal_effect = QtWidgets.QGraphicsOpacityEffect(self.hint_label)
@@ -302,3 +334,23 @@ class ChemicalNomenclatureDialog(QtWidgets.QDialog):
     def _update_card_color(self, value: QtGui.QColor) -> None:
         color = value.name()
         self.card.setStyleSheet(f"#practiceCard {{ background-color: {color}; border-radius: 8px; }}")
+
+    def _handle_enter(self) -> None:
+        if self._awaiting_next:
+            self._new_prompt()
+            return
+        self._check_answer()
+
+    def _update_score_label(self) -> None:
+        total = self._score_correct + self._score_incorrect
+        pct = int(round((self._score_correct / total) * 100)) if total else 0
+        self.score_label.setText(f"Score: {self._score_correct}/{total} ({pct}%)")
+
+    def _reset_score(self) -> None:
+        self._score_correct = 0
+        self._score_incorrect = 0
+        self._update_score_label()
+
+    def _sync_attempts(self) -> None:
+        if self.allow_retries.isChecked():
+            self._attempts = 0
