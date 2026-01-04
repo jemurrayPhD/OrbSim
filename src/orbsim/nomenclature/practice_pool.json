@@ -1,0 +1,86 @@
+[
+  {
+    "category": "Acids/Bases",
+    "formula": "HCl(aq)",
+    "primary_name": "Hydrochloric acid",
+    "accepted_answers": ["hydrochloric acid"],
+    "hint": "Binary acid in water uses hydro- ... -ic acid."
+  },
+  {
+    "category": "Acids/Bases",
+    "formula": "HCl(g)",
+    "primary_name": "Hydrogen chloride",
+    "accepted_answers": ["hydrogen chloride"],
+    "hint": "Gas-phase hydrogen halide."
+  },
+  {
+    "category": "Acids/Bases",
+    "formula": "HF(aq)",
+    "primary_name": "Hydrofluoric acid",
+    "accepted_answers": ["hydrofluoric acid"],
+    "hint": "Binary acid in water."
+  },
+  {
+    "category": "Acids/Bases",
+    "formula": "NH3(aq)",
+    "primary_name": "Ammonium hydroxide",
+    "accepted_answers": ["ammonium hydroxide", "aqueous ammonia"],
+    "hint": "Common classroom name for NH3 in water."
+  },
+  {
+    "category": "Ionic",
+    "formula": "NaCl",
+    "primary_name": "Sodium chloride",
+    "accepted_answers": ["sodium chloride"],
+    "hint": "Alkali metal + halide."
+  },
+  {
+    "category": "Ionic",
+    "formula": "CaCO3",
+    "primary_name": "Calcium carbonate",
+    "accepted_answers": ["calcium carbonate"],
+    "hint": "Calcium + carbonate."
+  },
+  {
+    "category": "Ionic",
+    "formula": "FeCl3",
+    "primary_name": "Iron(III) chloride",
+    "accepted_answers": ["iron(iii) chloride", "iron(3) chloride"],
+    "hint": "Transition metal with +3 charge."
+  },
+  {
+    "category": "Molecular",
+    "formula": "CO2",
+    "primary_name": "Carbon dioxide",
+    "accepted_answers": ["carbon dioxide"],
+    "hint": "Prefix for two oxygens."
+  },
+  {
+    "category": "Molecular",
+    "formula": "N2O",
+    "primary_name": "Dinitrogen monoxide",
+    "accepted_answers": ["dinitrogen monoxide", "nitrous oxide"],
+    "hint": "Two nitrogen atoms."
+  },
+  {
+    "category": "Polyatomic ions",
+    "formula": "KNO3",
+    "primary_name": "Potassium nitrate",
+    "accepted_answers": ["potassium nitrate"],
+    "hint": "K+ with nitrate."
+  },
+  {
+    "category": "Hydrates",
+    "formula": "CuSO4·5H2O",
+    "primary_name": "Copper(II) sulfate pentahydrate",
+    "accepted_answers": ["copper(ii) sulfate pentahydrate", "copper(2) sulfate pentahydrate"],
+    "hint": "Five waters."
+  },
+  {
+    "category": "Transition metals",
+    "formula": "FeO",
+    "primary_name": "Iron(II) oxide",
+    "accepted_answers": ["iron(ii) oxide", "iron(2) oxide"],
+    "hint": "O is -2, so Fe is +2."
+  }
+]

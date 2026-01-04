@@ -153,11 +153,9 @@ class BondingOrbitalsTab(AtomicOrbitalsTab):
         three_d_group = QtWidgets.QGroupBox("3D View")
         three_d_layout = QtWidgets.QFormLayout(three_d_group)
 
-        self.representation_combo = QtWidgets.QComboBox()
-        self.representation_combo.addItem("Surface (iso-probability)", "surface")
-        self.representation_combo.addItem("Volume (semi-transparent)", "volume")
-        self.representation_combo.currentIndexChanged.connect(self._set_representation)
-        three_d_layout.addRow("Type", self.representation_combo)
+        rendering_label = QtWidgets.QLabel("Volume")
+        rendering_label.setEnabled(False)
+        three_d_layout.addRow("3D Rendering", rendering_label)
 
         self.mode_combo = QtWidgets.QComboBox()
         self.mode_combo.addItems(["amplitude", "wavefunction"])
@@ -173,19 +171,23 @@ class BondingOrbitalsTab(AtomicOrbitalsTab):
         self.cmap_combo.currentTextChanged.connect(self._set_cmap)
         three_d_layout.addRow("Colormap", self.cmap_combo)
 
-        self.iso_slider_label = QtWidgets.QLabel("Contained probability (%)")
-        self.iso_slider = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
-        self.iso_slider.setRange(5, 99)
-        self.iso_slider.setValue(int(self.iso_fraction * 100))
-        self.iso_slider.valueChanged.connect(self._set_iso_fraction)
-        three_d_layout.addRow(self.iso_slider_label, self.iso_slider)
+        self.opacity_scale_slider = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
+        self.opacity_scale_slider.setRange(0, 200)
+        self.opacity_scale_slider.setValue(int(self.opacity_scale * 100))
+        self.opacity_scale_slider.valueChanged.connect(self._set_opacity_scale)
+        three_d_layout.addRow("Opacity scale", self.opacity_scale_slider)
 
-        self.iso_spin_label = QtWidgets.QLabel("Iso surfaces (3D)")
-        self.iso_surface_spin = QtWidgets.QSpinBox()
-        self.iso_surface_spin.setRange(2, 12)
-        self.iso_surface_spin.setValue(self.iso_surfaces_count)
-        self.iso_surface_spin.valueChanged.connect(self._set_iso_surfaces_count)
-        three_d_layout.addRow(self.iso_spin_label, self.iso_surface_spin)
+        self.opacity_low_slider = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
+        self.opacity_low_slider.setRange(0, 95)
+        self.opacity_low_slider.setValue(self.opacity_low)
+        self.opacity_low_slider.valueChanged.connect(self._set_opacity_low)
+        three_d_layout.addRow("Low cutoff (%)", self.opacity_low_slider)
+
+        self.opacity_high_slider = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
+        self.opacity_high_slider.setRange(5, 100)
+        self.opacity_high_slider.setValue(self.opacity_high)
+        self.opacity_high_slider.valueChanged.connect(self._set_opacity_high)
+        three_d_layout.addRow("High cutoff (%)", self.opacity_high_slider)
 
         self.volume_tf_btn = QtWidgets.QPushButton("Edit transfer function (3D)")
         self.volume_tf_btn.clicked.connect(self._open_volume_tf_dialog)
@@ -207,6 +209,10 @@ class BondingOrbitalsTab(AtomicOrbitalsTab):
         self.clip_mode_combo.addItem("Box clip", "box")
         self.clip_mode_combo.currentIndexChanged.connect(self._on_clip_mode_change)
         clip_layout.addRow("Mode", self.clip_mode_combo)
+        self.clip_invert_check = QtWidgets.QCheckBox("Invert clip")
+        self.clip_invert_check.stateChanged.connect(self._toggle_clip_invert)
+        self.clip_invert_check.setEnabled(False)
+        clip_layout.addRow(self.clip_invert_check)
         reset_btn = QtWidgets.QPushButton("Reset clip")
         reset_btn.clicked.connect(self._reset_clipping)
         clip_layout.addRow(reset_btn)
@@ -568,13 +574,12 @@ class BondingOrbitalsTab(AtomicOrbitalsTab):
             print(f"Blend error: {exc}", file=sys.stderr)
             return grid
 
-    def _fields_for_key(self, key: str) -> tuple | None:
+    def _fields_for_key(self, key: str) -> pv.DataSet | None:
         grid = self._blended_grid(key)
         if grid is None:
             return None
-        surface_field = field_from_grid(grid.copy(deep=False), self.current_mode, representation="surface", iso_fraction=self.iso_fraction)
         volume_field = field_from_grid(grid.copy(deep=False), self.current_mode, representation="volume", iso_fraction=self.iso_fraction)
-        return surface_field, volume_field
+        return volume_field
 
     def _nucleus_color(self, symbol: str) -> str:
         return NUCLEUS_COLORS.get(symbol, "#f8fafc")
@@ -640,11 +645,10 @@ class BondingOrbitalsTab(AtomicOrbitalsTab):
             self.slice_view.clear()
             return
         key = self._selected_hybrid_key()
-        fields_pair = self._fields_for_key(key)
-        if not fields_pair:
+        volume_field = self._fields_for_key(key)
+        if not volume_field:
             return
-        surface_field, volume_field = fields_pair
-        fields = [surface_field]
+        fields = []
 
         if reuse_camera:
             try:
@@ -663,85 +667,15 @@ class BondingOrbitalsTab(AtomicOrbitalsTab):
                 self.plotter.camera_position = camera_state
             except Exception:
                 pass
-        if not fields:
-            return
         clip_bounds = self.clip_box_bounds if self.clip_mode == "box" else None
 
-        if self.current_representation == "volume":
-            if clip_bounds:
-                try:
-                    volume_field = volume_field.copy()
-                    volume_field.dataset = volume_field.dataset.clip_box(clip_bounds, invert=False)
-                except Exception:
-                    pass
-            if self.clip_mode == "plane" and self.clip_plane_normal is not None and self.clip_plane_origin is not None:
-                try:
-                    volume_field = volume_field.copy()
-                    volume_field.dataset = volume_field.dataset.clip(
-                        normal=self.clip_plane_normal,
-                        origin=self.clip_plane_origin,
-                        invert=False,
-                    )
-                except Exception:
-                    pass
-            prob_arr = np.asarray(volume_field.dataset.get_array("probability"))
-            vmax = float(np.nanmax(prob_arr)) if prob_arr.size else 1.0
-            if vmax <= 0:
-                vmax = 1.0
-            clim = (0.0, vmax)
-            label = "Electron Density"
-        else:
-            if fields[0].scalar_name == "phase":
-                clim = (-np.pi, np.pi)
-                label = "Phase (rad)"
-            else:
-                vmax = 1.0
-                arr = np.asarray(fields[0].dataset[fields[0].scalar_name]) if fields[0].dataset.get_array(fields[0].scalar_name) is not None else np.array([])
-                if arr.size:
-                    vmax = max(vmax, float(np.nanmax(arr)))
-                if vmax == 0:
-                    vmax = 1.0
-                clim = (0.0, vmax)
-                label = "Amplitude"
-
-        iso_text = ""
-        if self.current_representation == "surface":
-            last = fields[0]
-            if last.cumulative_probability is not None:
-                iso_text = f"Contains {last.cumulative_probability*100:.1f}% of probability"
-
-        if self.current_representation == "volume":
-            self._add_iso_surfaces(volume_field, clim)
-        else:
-            for field in fields:
-                dataset = field.dataset
-                if clip_bounds:
-                    try:
-                        dataset = dataset.clip_box(clip_bounds, invert=False)
-                    except Exception:
-                        dataset = field.dataset
-                if self.clip_mode == "plane" and self.clip_plane_normal is not None and self.clip_plane_origin is not None:
-                    try:
-                        dataset = dataset.clip(
-                            normal=self.clip_plane_normal,
-                            origin=self.clip_plane_origin,
-                            invert=False,
-                        )
-                    except Exception:
-                        dataset = dataset
-                self.plotter.add_mesh(
-                    dataset,
-                    scalars=field.scalar_name,
-                    cmap=self.current_cmap,
-                    opacity=field.opacity,
-                    specular=0.55,
-                    specular_power=25.0,
-                    diffuse=0.8,
-                    ambient=0.25,
-                    smooth_shading=True,
-                    clim=clim,
-                    show_scalar_bar=False,
-                )
+        prob_arr = np.asarray(volume_field.dataset.get_array("probability"))
+        vmax = float(np.nanmax(prob_arr)) if prob_arr.size else 1.0
+        if vmax <= 0:
+            vmax = 1.0
+        clim = (0.0, vmax)
+        label = "Electron Density"
+        self._add_volume_render(volume_field, prob_arr)
         main_title = f"{key.title()} hybrid ({len(self.orbitals)} orbitals)"
         self.plotter.add_text(
             main_title,
@@ -760,15 +694,14 @@ class BondingOrbitalsTab(AtomicOrbitalsTab):
             name="view_label",
             position="upper_right",
         )
-        if iso_text:
-            self.plotter.add_text(
-                iso_text,
-                font_size=10,
-                color=self._text_color,
-                shadow=self._text_shadow,
-                name="iso_text",
-                position="lower_left",
-            )
+        self.plotter.add_text(
+            "Volume rendering",
+            font_size=10,
+            color=self._text_color,
+            shadow=self._text_shadow,
+            name="iso_text",
+            position="lower_left",
+        )
         self._apply_slice(fields, volume_field, clim)
         self._render_nuclei()
         if not self.camera_initialized:

@@ -11,6 +11,7 @@ from pyvistaqt import QtInteractor
 
 from orbsim.chem.elements import get_atomic_number, get_element, get_name, get_symbol
 from orbsim.theming.theme_manager import get_theme_manager
+from orbsim.chem import compound_db
 from orbsim.resources import load_icon
 
 @dataclass(frozen=True)
@@ -1527,6 +1528,10 @@ class CompoundPreviewPane(QtWidgets.QWidget):
         self.title_label.setFont(title_font)
         header_stack.addWidget(self.title_label)
 
+        self.formula_label = QtWidgets.QLabel("")
+        self.formula_label.setWordWrap(True)
+        header_stack.addWidget(self.formula_label)
+
         self.iupac_label = QtWidgets.QLabel("")
         self.iupac_label.setWordWrap(True)
         header_stack.addWidget(self.iupac_label)
@@ -1584,6 +1589,7 @@ class CompoundPreviewPane(QtWidgets.QWidget):
         colors = tokens["colors"]
         self.setStyleSheet(f"color: {colors['text']};")
         self.title_label.setStyleSheet(f"color: {colors['text']};")
+        self.formula_label.setStyleSheet(f"color: {colors['textMuted']};")
         self.iupac_label.setStyleSheet(f"color: {colors['textMuted']};")
         self.synonyms_label.setStyleSheet(f"color: {colors['textMuted']};")
         self.structure_widget.apply_theme(tokens)
@@ -1595,6 +1601,7 @@ class CompoundPreviewPane(QtWidgets.QWidget):
         if not compound:
             self._pubchem_url = None
             self.title_label.setText("Compound")
+            self.formula_label.setText("")
             self.iupac_label.setText("")
             self._synonyms_full = []
             self._update_synonyms_display()
@@ -1604,13 +1611,14 @@ class CompoundPreviewPane(QtWidgets.QWidget):
             self._clear_form_layout(self.properties_left_layout)
             self._clear_form_layout(self.properties_right_layout)
             return
-        title = compound.get("title") or compound.get("name") or ""
-        title = title.strip() if isinstance(title, str) else str(title)
-        iupac = compound.get("iupac_name") or ""
-        iupac = str(iupac).strip()
-        self.title_label.setText(title or "Compound")
+        display = compound_db.format_compound_display(compound)
+        primary = display["primary_name"] or "Compound"
+        iupac = display["iupac_name"]
+        formula_display = display["formula_display"]
+        self.title_label.setText(primary)
+        self.formula_label.setText(f"Formula: {formula_display}" if formula_display else "Formula: —")
         self.iupac_label.setText(f"IUPAC: {iupac}" if iupac else "IUPAC: —")
-        self._synonyms_full = self._clean_synonyms(compound.get("synonyms") or [])
+        self._synonyms_full = self._clean_synonyms(display["synonyms"])
         self._update_synonyms_display()
         self._pubchem_url = compound.get("pubchem_url")
         self.structure_widget.set_cid(compound.get("cid"))
@@ -1692,8 +1700,9 @@ class CompoundPreviewPane(QtWidgets.QWidget):
             self.synonyms_label.setText("Also known as: —")
             self.synonyms_copy_button.setEnabled(False)
             return
-        display = self._format_synonyms(self._synonyms_full, max_items=6, max_chars=120)
-        self.synonyms_label.setText(f"Also known as: {display}")
+        display, remaining = self._format_synonyms(self._synonyms_full, max_items=6, max_chars=120)
+        suffix = f" (+{remaining} more)" if remaining > 0 else ""
+        self.synonyms_label.setText(f"Also known as: {display}{suffix}")
         self.synonyms_copy_button.setEnabled(True)
 
     @staticmethod
@@ -1724,11 +1733,14 @@ class CompoundPreviewPane(QtWidgets.QWidget):
         return cleaned
 
     @staticmethod
-    def _format_synonyms(values: list[str], max_items: int = 6, max_chars: int = 120) -> str:
-        display = ", ".join(values[:max_items])
+    def _format_synonyms(values: list[str], max_items: int = 6, max_chars: int = 120) -> tuple[str, int]:
+        display_list = values[:max_items]
+        display = ", ".join(display_list)
+        truncated = len(values) - len(display_list)
         if len(display) > max_chars:
-            return display[: max_chars - 1].rstrip() + "…"
-        return display
+            display = display[: max_chars - 1].rstrip() + "…"
+            truncated = max(truncated, 1)
+        return display, truncated
 
 
 def estimate_oxidation_states(compound: dict) -> tuple[dict[str, int | None], bool]:

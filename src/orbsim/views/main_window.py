@@ -15,6 +15,7 @@ from orbsim.tabs.electron_shells_tab import ElectronShellsTab
 from orbsim.tabs.periodic_table_tab import PeriodicTableTab
 from orbsim.views.annotation_editor import AnnotationEditorWindow
 from orbsim.dialogs.compound_database_dialog import CompoundDatabaseDialog
+from orbsim.dialogs.chemical_nomenclature_dialog import ChemicalNomenclatureDialog
 from orbsim.widgets import DropPlotter, PeriodicTableWidget
 
 
@@ -97,8 +98,17 @@ class OrbSimMainWindow(QtWidgets.QMainWindow):
         compound_action.triggered.connect(self._open_compound_db_dialog)
         settings_menu.addAction(compound_action)
 
+        references_menu = self.menuBar().addMenu("References")
+        nomenclature_action = QtGui.QAction("Chemical Nomenclature", self)
+        nomenclature_action.triggered.connect(self._open_nomenclature_dialog)
+        references_menu.addAction(nomenclature_action)
+
     def _open_compound_db_dialog(self) -> None:
         dialog = CompoundDatabaseDialog(self)
+        dialog.exec()
+
+    def _open_nomenclature_dialog(self) -> None:
+        dialog = ChemicalNomenclatureDialog(self)
         dialog.exec()
 
     def apply_theme(self, theme_name: str) -> None:

@@ -5,6 +5,7 @@ from pathlib import Path
 from PySide6 import QtCore, QtGui, QtNetwork, QtWidgets
 
 from orbsim.chem.elements import get_atomic_number, get_element, get_symbol
+from orbsim.chem import compound_db
 
 
 def _element_family(symbol: str) -> str:
@@ -95,8 +96,10 @@ class CompoundDetailsDialog(QtWidgets.QDialog):
         layout.addWidget(close_btn, 0, QtCore.Qt.AlignmentFlag.AlignRight)
 
     def _populate(self) -> None:
-        title = self.compound.get("title") or self.compound.get("name") or "Compound"
-        self.title_label.setText(f"{title} ({self.compound['formula']})")
+        display = compound_db.format_compound_display(self.compound)
+        title = display["primary_name"] or "Compound"
+        formula_display = display["formula_display"] or self.compound.get("formula") or ""
+        self.title_label.setText(f"{title} ({formula_display})")
 
         oxidation_states, heuristic = estimate_oxidation_states(self.compound)
         if heuristic:
@@ -109,9 +112,9 @@ class CompoundDetailsDialog(QtWidgets.QDialog):
         self.bonding_label.setText(f"Bonding: {bonding_text}. Polarity: {polarity_text}.")
 
         properties = [("Molecular weight", self.compound.get("mol_weight"))]
-        if self.compound.get("iupac_name"):
-            properties.append(("IUPAC", self.compound.get("iupac_name")))
-        synonyms = self._clean_synonyms(self.compound.get("synonyms") or [])
+        if display["iupac_name"]:
+            properties.append(("IUPAC", display["iupac_name"]))
+        synonyms = self._clean_synonyms(display["synonyms"])
         if synonyms:
             properties.append(("Also known as", ", ".join(synonyms[:6])))
         prop_lines = [f"{label}: {value}" for label, value in properties if value]
