@@ -29,7 +29,6 @@ from orbsim.orbitals import (
 from orbsim.tabs.shared import resolve_cmap
 from orbsim.ui.generated.ui_atomic_orbitals import Ui_AtomicOrbitalsTab
 from orbsim.views.clipping_controller import ClippingController
-from orbsim.views.slicing_controller import SlicingController
 from orbsim.widgets import DropPlotter
 
 ureg = UnitRegistry()
@@ -264,7 +263,6 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         self.slice_normal = np.array([0.0, 0.0, 1.0])
         self.slice_offset = 0.0
         self.slice_origin: np.ndarray | None = None
-        self.slice_mode: str = "none"
         self.clip_mode: str = "none"
         self.clip_plane_normal: np.ndarray | None = None
         self.clip_plane_origin: np.ndarray | None = None
@@ -289,8 +287,10 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
             pass
         self._wrap_viewport_frame(self.plotter_frame)
         self.plotter = self.plotter_frame.plotter
-        self.slicing_controller = SlicingController(self.plotter)
-        self.slicing_controller.slice_changed.connect(self._on_slice_widget_changed)
+        try:
+            self.plotter.enable_depth_peeling()
+        except Exception:
+            pass
         self.clipping_controller = ClippingController(self.plotter)
         self.clipping_controller.clip_changed.connect(self._on_clip_widget_changed)
         try:
@@ -338,7 +338,6 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         self._set_slice_normal(self.slice_normal, update_controls=True, trigger_render=False)
         self.slice_offset = 0.0
         self.offset_spin.setValue(self.slice_offset)
-        self.slice_cmap = self.current_cmap
         self.slice_vmin = None
         self.slice_vmax = None
         self.slice_scalar_mode = "probability"
@@ -442,18 +441,7 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         prefs_btn.clicked.connect(self._open_preferences)
         three_d_layout.addRow(prefs_btn)
 
-        slicing_group = QtWidgets.QGroupBox("Slicing")
-        slicing_layout = QtWidgets.QFormLayout(slicing_group)
-        self.slice_mode_combo = QtWidgets.QComboBox()
-        self.slice_mode_combo.addItem("None", "none")
-        self.slice_mode_combo.addItem("Plane", "plane")
-        self.slice_mode_combo.currentIndexChanged.connect(self._on_slice_mode_change)
-        slicing_layout.addRow("Mode", self.slice_mode_combo)
-        reset_slice_btn = QtWidgets.QPushButton("Reset slicing")
-        reset_slice_btn.clicked.connect(self._reset_slicing)
-        slicing_layout.addRow(reset_slice_btn)
-
-        clip_group = QtWidgets.QGroupBox("Clipping (3D)")
+        clip_group = QtWidgets.QGroupBox("Clipping")
         clip_layout = QtWidgets.QFormLayout(clip_group)
         self.clip_mode_combo = QtWidgets.QComboBox()
         self.clip_mode_combo.addItem("None", "none")
@@ -486,7 +474,6 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         quantum_layout.addRow("m (magnetic)", self.m_spin)
 
         layout.addWidget(three_d_group)
-        layout.addWidget(slicing_group)
         layout.addWidget(clip_group)
         layout.addWidget(quantum_group)
 
@@ -548,20 +535,12 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         two_d_layout.addRow(self.offset_slider)
 
         self.slice_scalar_combo = QtWidgets.QComboBox()
-        self.slice_scalar_combo.addItem("Probability density", "probability")
+        self.slice_scalar_combo.addItem("Electron Density", "probability")
         self.slice_scalar_combo.addItem("Cumulative probability", "cumulative")
         self.slice_scalar_combo.addItem("Probability amplitude", "amplitude")
         self.slice_scalar_combo.addItem("Phase (cyclic)", "phase")
         self.slice_scalar_combo.currentIndexChanged.connect(self._set_slice_scalar_mode)
         two_d_layout.addRow("Slice scalars", self.slice_scalar_combo)
-
-        self.slice_cmap_combo = QtWidgets.QComboBox()
-        self.slice_cmap_combo.addItems(
-            ["viridis", "plasma", "inferno", "twilight", "coolwarm", "twilight_shifted", "magma", "cividis", "batlow", "bamako", "devon", "oslo", "lajolla", "hawaii", "davos", "vik", "broc", "cork", "roma", "tokyo"]
-        )
-        self.slice_cmap_combo.setCurrentText(self.current_cmap)
-        self.slice_cmap_combo.currentTextChanged.connect(self._set_slice_cmap)
-        two_d_layout.addRow("Colormap (2D)", self.slice_cmap_combo)
 
         self.slice_vmin_spin = QtWidgets.QDoubleSpinBox()
         self.slice_vmin_spin.setDecimals(4)
@@ -637,15 +616,6 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
             self.cmap_combo.setCurrentText("twilight")
         self._render_orbital()
 
-    def _on_slice_mode_change(self) -> None:
-        mode = self.slice_mode_combo.currentData() if hasattr(self, "slice_mode_combo") else "none"
-        if self.slicing_controller:
-            self.slicing_controller.set_mode(mode)
-
-    def _reset_slicing(self) -> None:
-        if self.slicing_controller:
-            self.slicing_controller.reset()
-
     def _on_clip_mode_change(self) -> None:
         mode = self.clip_mode_combo.currentData() if hasattr(self, "clip_mode_combo") else "none"
         if self.clipping_controller:
@@ -678,10 +648,6 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         self.slice_contours_count = max(2, int(value))
         self._render_orbital()
 
-    def _set_slice_cmap(self, cmap: str) -> None:
-        self.slice_cmap = cmap
-        self._render_orbital()
-
     def _set_slice_vmin(self, value: float) -> None:
         self.slice_vmin = None if value == 0 and self.slice_vmin_spin.specialValueText() else value
         self._render_orbital()
@@ -702,23 +668,6 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         self.slice_scalar_mode = self.slice_scalar_combo.currentData()
         self._render_orbital()
 
-    def _on_slice_widget_changed(self, payload: dict) -> None:
-        mode = payload.get("mode", "none")
-        self.slice_mode = mode
-        plane = payload.get("plane", {}) if isinstance(payload.get("plane"), dict) else {}
-        if mode == "plane":
-            origin = plane.get("origin")
-            normal = plane.get("normal")
-            if origin is not None and normal is not None:
-                try:
-                    self.slice_origin = np.array(origin, dtype=float)
-                    self.slice_normal = np.array(normal, dtype=float)
-                except Exception:
-                    pass
-        else:
-            self.slice_origin = None
-        self._render_orbital()
-
     def _on_clip_widget_changed(self, payload: dict) -> None:
         mode = payload.get("mode", "none")
         self.clip_mode = mode
@@ -731,6 +680,9 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
                 try:
                     self.clip_plane_origin = np.array(origin, dtype=float)
                     self.clip_plane_normal = np.array(normal, dtype=float)
+                    self.slice_origin = np.array(origin, dtype=float)
+                    self.slice_normal = np.array(normal, dtype=float)
+                    self._sync_slice_controls()
                 except Exception:
                     pass
         elif mode == "box":
@@ -801,9 +753,9 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         layout = QtWidgets.QFormLayout(dialog)
 
         cmap_combo = QtWidgets.QComboBox(dialog)
-        cmap_options = [self.slice_cmap_combo.itemText(i) for i in range(self.slice_cmap_combo.count())]
+        cmap_options = [self.cmap_combo.itemText(i) for i in range(self.cmap_combo.count())]
         cmap_combo.addItems(cmap_options)
-        cmap_combo.setCurrentText(self.slice_cmap)
+        cmap_combo.setCurrentText(self.current_cmap)
         layout.addRow("Colormap", cmap_combo)
 
         vmin_spin = QtWidgets.QDoubleSpinBox(dialog)
@@ -833,8 +785,10 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         layout.addRow(buttons)
 
         if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
-            self.slice_cmap = cmap_combo.currentText()
-            self.slice_cmap_combo.setCurrentText(self.slice_cmap)
+            new_cmap = cmap_combo.currentText()
+            if new_cmap != self.current_cmap:
+                self.current_cmap = new_cmap
+                self.cmap_combo.setCurrentText(new_cmap)
             vmin = None if vmin_spin.value() == 0.0 and vmin_spin.specialValueText() else vmin_spin.value()
             vmax = None if vmax_spin.value() == 0.0 and vmax_spin.specialValueText() else vmax_spin.value()
             self.slice_vmin = vmin
@@ -881,6 +835,11 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
                 spin.blockSignals(False)
         if trigger_render:
             self._render_orbital()
+
+    def _sync_slice_controls(self) -> None:
+        if self.slice_normal is None:
+            return
+        self._set_slice_normal(self.slice_normal, update_controls=True, trigger_render=False)
 
     def _set_offset(self, value: float) -> None:
         self.slice_offset = float(value)
@@ -983,8 +942,6 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         self.plotter_frame.reset_scene()
         self.slice_view.clear()
         self.slice_plane_actor = None
-        if self.slicing_controller and self.slice_mode != "none":
-            self.slicing_controller.set_mode(self.slice_mode)
         if self.clipping_controller and self.clip_mode != "none":
             self.clipping_controller.set_mode(self.clip_mode)
         if self.camera_initialized and camera_state:
@@ -1017,7 +974,7 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
             if vmax <= 0:
                 vmax = 1.0
             clim = (0.0, vmax)
-            label = "Probability"
+            label = "Electron Density"
         else:
             if fields[0].scalar_name == "phase":
                 clim = (-np.pi, np.pi)
@@ -1254,9 +1211,11 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
             self.slice_colorbar.setPixmap(pixmap)
             self.slice_colorbar.setMinimumHeight(pixmap.height() + 6)
             border_color = colors_token.get("border", "#1f2937")
+            panel_color = QtGui.QColor(colors_token.get("surfaceAlt", "#0f172a"))
+            panel_color.setAlpha(220)
             self.slice_colorbar.setStyleSheet(
                 "background-color: {bg}; color: {text}; border: 1px solid {border}; padding: 6px;".format(
-                    bg=colors_token.get("surfaceAlt", "#0f172a"),
+                    bg=panel_color.name(QtGui.QColor.HexArgb),
                     text=label_color,
                     border=border_color,
                 )
@@ -1301,7 +1260,12 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
             self._render_orbital()
 
     def _apply_slice(self, fields, volume_field, clim: tuple[float, float]) -> None:
-        normal = self.slice_normal
+        use_clip_plane = (
+            self.clip_mode == "plane"
+            and self.clip_plane_normal is not None
+            and self.clip_plane_origin is not None
+        )
+        normal = self.clip_plane_normal if use_clip_plane else self.slice_normal
         norm = np.linalg.norm(normal)
         if norm < 1e-6:
             return
@@ -1325,14 +1289,17 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
                     self.offset_slider.setRange(-slider_range, slider_range)
                     self.offset_slider.blockSignals(False)
 
-        if self.slice_mode == "plane" and self.slice_origin is not None:
+        if use_clip_plane:
+            origin = np.array(self.clip_plane_origin, dtype=float)
+            self.slice_origin = origin
+        elif self.slice_origin is not None:
             origin = self.slice_origin
         else:
             origin = np.array(volume_ds.center) + normal * self.slice_offset
         plane_size = extent * 1.2 if extent and extent > 0 else 5.0
 
         try:
-            if self.pref_show_slice_plane and self.slice_mode == "plane":
+            if self.pref_show_slice_plane and use_clip_plane:
                 plane_geom = pv.Plane(
                     center=origin,
                     direction=normal,
@@ -1416,11 +1383,11 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
             plane["cum_prob"] = cum_vals
 
             self.slice_view.clear()
-            slice_cmap = getattr(self, "slice_cmap", self.current_cmap)
+            slice_cmap = self.current_cmap
             slice_clim = clim
             scalar_name = "probability"
             scalar_data = prob_vals
-            label = "Probability"
+            label = "Electron Density"
 
             if self.slice_scalar_mode == "cumulative":
                 scalar_name = "slice_scalar"

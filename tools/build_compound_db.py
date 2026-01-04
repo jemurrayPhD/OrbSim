@@ -48,6 +48,18 @@ def fetch_properties(cid: int) -> dict | None:
     return props[0] if props else None
 
 
+def fetch_synonyms(cid: int) -> list[str]:
+    url = f"{PUBCHEM_BASE}/compound/cid/{cid}/synonyms/JSON"
+    try:
+        data = fetch_json(url)
+    except Exception:
+        return []
+    info = data.get("InformationList", {}).get("Information", [])
+    if not info:
+        return []
+    return info[0].get("Synonym", []) or []
+
+
 def create_schema(connection: sqlite3.Connection) -> None:
     connection.executescript(
         """
@@ -81,7 +93,10 @@ def load_seed_names(seed_path: Path) -> list[str]:
             for row in reader:
                 name = (row.get("name") or "").strip()
                 if name:
-                    names.append(name)
+                    for part in name.split(";"):
+                        entry = part.strip()
+                        if entry:
+                            names.append(entry)
         else:
             handle.seek(0)
             reader_plain = csv.reader(handle)
@@ -89,7 +104,10 @@ def load_seed_names(seed_path: Path) -> list[str]:
                 if row:
                     name = row[0].strip()
                     if name and name.lower() != "name":
-                        names.append(name)
+                        for part in name.split(";"):
+                            entry = part.strip()
+                            if entry:
+                                names.append(entry)
         return names
 
 
@@ -109,6 +127,7 @@ def build_db(seed_path: Path, output: Path) -> None:
         if not props:
             print(f"Skipping {name}: no properties", file=sys.stderr)
             continue
+        synonyms = fetch_synonyms(cid)
         formula = props.get("MolecularFormula")
         if not formula:
             print(f"Skipping {name}: no formula", file=sys.stderr)
@@ -125,7 +144,13 @@ def build_db(seed_path: Path, output: Path) -> None:
                 continue
             element_counts.append((element.atomic_number, count))
 
-        data_json = json.dumps({"iupac_name": props.get("IUPACName")})
+        data_json = json.dumps(
+            {
+                "iupac_name": props.get("IUPACName"),
+                "title": props.get("Title") or name.title(),
+                "synonyms": synonyms,
+            }
+        )
         connection.execute(
             """
             INSERT OR REPLACE INTO compounds

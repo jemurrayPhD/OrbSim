@@ -110,6 +110,7 @@ def get_compound_details(cid: int) -> dict | None:
         {
             "cid": row["cid"],
             "name": row["name"],
+            "title": data.get("title") or row["name"],
             "formula": row["formula"],
             "smiles": row["smiles"],
             "inchikey": row["inchikey"],

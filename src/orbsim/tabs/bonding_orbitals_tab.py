@@ -199,20 +199,20 @@ class BondingOrbitalsTab(AtomicOrbitalsTab):
         prefs_btn.clicked.connect(self._open_preferences)
         three_d_layout.addRow(prefs_btn)
 
-        slicing_group = QtWidgets.QGroupBox("Slicing")
-        slicing_layout = QtWidgets.QFormLayout(slicing_group)
-        self.slice_mode_combo = QtWidgets.QComboBox()
-        self.slice_mode_combo.addItem("None", "none")
-        self.slice_mode_combo.addItem("Plane", "plane")
-        self.slice_mode_combo.addItem("Box clip", "box")
-        self.slice_mode_combo.currentIndexChanged.connect(self._on_slice_mode_change)
-        slicing_layout.addRow("Mode", self.slice_mode_combo)
-        reset_btn = QtWidgets.QPushButton("Reset slicing")
-        reset_btn.clicked.connect(self._reset_slicing)
-        slicing_layout.addRow(reset_btn)
+        clip_group = QtWidgets.QGroupBox("Clipping")
+        clip_layout = QtWidgets.QFormLayout(clip_group)
+        self.clip_mode_combo = QtWidgets.QComboBox()
+        self.clip_mode_combo.addItem("None", "none")
+        self.clip_mode_combo.addItem("Plane clip", "plane")
+        self.clip_mode_combo.addItem("Box clip", "box")
+        self.clip_mode_combo.currentIndexChanged.connect(self._on_clip_mode_change)
+        clip_layout.addRow("Mode", self.clip_mode_combo)
+        reset_btn = QtWidgets.QPushButton("Reset clip")
+        reset_btn.clicked.connect(self._reset_clipping)
+        clip_layout.addRow(reset_btn)
 
         layout.addWidget(three_d_group)
-        layout.addWidget(slicing_group)
+        layout.addWidget(clip_group)
 
         two_d_group = QtWidgets.QGroupBox("2D Slice")
         two_d_layout = QtWidgets.QFormLayout(two_d_group)
@@ -271,20 +271,13 @@ class BondingOrbitalsTab(AtomicOrbitalsTab):
         two_d_layout.addRow(self.offset_slider)
 
         self.slice_scalar_combo = QtWidgets.QComboBox()
-        self.slice_scalar_combo.addItem("Probability density", "probability")
+        self.slice_scalar_combo.addItem("Electron Density", "probability")
         self.slice_scalar_combo.addItem("Cumulative probability", "cumulative")
         self.slice_scalar_combo.addItem("Probability amplitude", "amplitude")
         self.slice_scalar_combo.addItem("Phase (cyclic)", "phase")
         self.slice_scalar_combo.currentIndexChanged.connect(self._set_slice_scalar_mode)
         two_d_layout.addRow("Slice scalars", self.slice_scalar_combo)
 
-        self.slice_cmap_combo = QtWidgets.QComboBox()
-        self.slice_cmap_combo.addItems(
-            ["viridis", "plasma", "inferno", "twilight", "coolwarm", "twilight_shifted", "magma", "cividis", "batlow", "bamako", "devon", "oslo", "lajolla", "hawaii", "davos", "vik", "broc", "cork", "roma", "tokyo"]
-        )
-        self.slice_cmap_combo.setCurrentText(self.current_cmap)
-        self.slice_cmap_combo.currentTextChanged.connect(self._set_slice_cmap)
-        two_d_layout.addRow("Colormap (2D)", self.slice_cmap_combo)
 
         self.slice_vmin_spin = QtWidgets.QDoubleSpinBox()
         self.slice_vmin_spin.setDecimals(4)
@@ -660,8 +653,6 @@ class BondingOrbitalsTab(AtomicOrbitalsTab):
                 pass
         else:
             self.plotter_frame.reset_scene()
-            if self.slicing_controller and self.slice_mode != "none":
-                self.slicing_controller.set_mode(self.slice_mode)
             if self.clipping_controller and self.clip_mode != "none":
                 self.clipping_controller.set_mode(self.clip_mode)
         if not reuse_slice:
@@ -674,7 +665,7 @@ class BondingOrbitalsTab(AtomicOrbitalsTab):
                 pass
         if not fields:
             return
-        clip_bounds = self.slice_box_bounds if self.slice_mode == "box" else None
+        clip_bounds = self.clip_box_bounds if self.clip_mode == "box" else None
 
         if self.current_representation == "volume":
             if clip_bounds:
@@ -683,12 +674,22 @@ class BondingOrbitalsTab(AtomicOrbitalsTab):
                     volume_field.dataset = volume_field.dataset.clip_box(clip_bounds, invert=False)
                 except Exception:
                     pass
+            if self.clip_mode == "plane" and self.clip_plane_normal is not None and self.clip_plane_origin is not None:
+                try:
+                    volume_field = volume_field.copy()
+                    volume_field.dataset = volume_field.dataset.clip(
+                        normal=self.clip_plane_normal,
+                        origin=self.clip_plane_origin,
+                        invert=False,
+                    )
+                except Exception:
+                    pass
             prob_arr = np.asarray(volume_field.dataset.get_array("probability"))
             vmax = float(np.nanmax(prob_arr)) if prob_arr.size else 1.0
             if vmax <= 0:
                 vmax = 1.0
             clim = (0.0, vmax)
-            label = "Probability"
+            label = "Electron Density"
         else:
             if fields[0].scalar_name == "phase":
                 clim = (-np.pi, np.pi)
@@ -719,6 +720,15 @@ class BondingOrbitalsTab(AtomicOrbitalsTab):
                         dataset = dataset.clip_box(clip_bounds, invert=False)
                     except Exception:
                         dataset = field.dataset
+                if self.clip_mode == "plane" and self.clip_plane_normal is not None and self.clip_plane_origin is not None:
+                    try:
+                        dataset = dataset.clip(
+                            normal=self.clip_plane_normal,
+                            origin=self.clip_plane_origin,
+                            invert=False,
+                        )
+                    except Exception:
+                        dataset = dataset
                 self.plotter.add_mesh(
                     dataset,
                     scalars=field.scalar_name,
