@@ -41,6 +41,7 @@ class ElementTileButton(QtWidgets.QAbstractButton):
         self.setText(text)
         self._symbol = ""
         self._atomic_number = 0
+        self._extra_text = ""
         self.setCheckable(True)
         self._base_color = QtGui.QColor("#94a3b8")
         self._text_color = QtGui.QColor("#0f172a")
@@ -70,6 +71,10 @@ class ElementTileButton(QtWidgets.QAbstractButton):
     def set_element(self, symbol: str, atomic_number: int) -> None:
         self._symbol = symbol
         self._atomic_number = atomic_number
+        self.update()
+
+    def set_extra_text(self, text: str) -> None:
+        self._extra_text = text or ""
         self.update()
 
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:
@@ -129,6 +134,17 @@ class ElementTileButton(QtWidgets.QAbstractButton):
                 rect.adjusted(6, 4, -6, -4),
                 QtCore.Qt.AlignmentFlag.AlignTop | QtCore.Qt.AlignmentFlag.AlignLeft,
                 str(self._atomic_number),
+            )
+        if self._extra_text:
+            extra_font = painter.font()
+            extra_font.setBold(False)
+            extra_font.setPointSize(max(self._font_point_size - 3, 7))
+            painter.setFont(extra_font)
+            painter.setPen(QtGui.QPen(self._text_color))
+            painter.drawText(
+                rect.adjusted(4, 0, -4, -4),
+                QtCore.Qt.AlignmentFlag.AlignBottom | QtCore.Qt.AlignmentFlag.AlignHCenter,
+                self._extra_text,
             )
         painter.end()
 

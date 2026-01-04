@@ -602,11 +602,13 @@ class PeriodicTableTab(QtWidgets.QWidget):
                 bg = self.FAMILY_COLORS.get(self._FAMILY_ALIASES.get(family.lower(), family) if isinstance(family, str) else family, "#94a3b8")
                 btn.set_tile_color(bg, colors=self._theme_colors)
                 btn.set_element(elem["symbol"], elem["atomicNumber"])
+                btn.set_extra_text("")
             elif scheme == "state":
                 state = str(elem.get("standardState", "unknown")).lower()
                 bg = state_colors.get(state, "#cbd5e1")
                 btn.set_tile_color(bg, colors=self._theme_colors)
                 btn.set_element(elem["symbol"], elem["atomicNumber"])
+                btn.set_extra_text("")
             else:
                 if cmap is None or vmin is None or vmax is None:
                     bg = "#cbd5e1"
@@ -629,6 +631,7 @@ class PeriodicTableTab(QtWidgets.QWidget):
                         extra = self._format_numeric(val)
                 btn.set_tile_color(bg, colors=self._theme_colors)
                 btn.set_element(elem["symbol"], elem["atomicNumber"])
+                btn.set_extra_text(extra)
 
     def _render_table_colorbar(self, field: str, scheme_key: str, label: str) -> None:
         vals: list[float] = []
