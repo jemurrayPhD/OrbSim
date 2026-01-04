@@ -14,6 +14,7 @@ from orbsim.tabs.compound_builder_tab import CompoundBuilderTab
 from orbsim.tabs.electron_shells_tab import ElectronShellsTab
 from orbsim.tabs.periodic_table_tab import PeriodicTableTab
 from orbsim.views.annotation_editor import AnnotationEditorWindow
+from orbsim.dialogs.compound_database_dialog import CompoundDatabaseDialog
 from orbsim.widgets import DropPlotter, PeriodicTableWidget
 
 
@@ -90,6 +91,15 @@ class OrbSimMainWindow(QtWidgets.QMainWindow):
             action.triggered.connect(lambda checked, n=name: self.apply_theme(n))
             theme_group.addAction(action)
             theme_menu.addAction(action)
+
+        settings_menu = self.menuBar().addMenu("Settings")
+        compound_action = QtGui.QAction("Compound Database…", self)
+        compound_action.triggered.connect(self._open_compound_db_dialog)
+        settings_menu.addAction(compound_action)
+
+    def _open_compound_db_dialog(self) -> None:
+        dialog = CompoundDatabaseDialog(self)
+        dialog.exec()
 
     def apply_theme(self, theme_name: str) -> None:
         self._theme_name = theme_name

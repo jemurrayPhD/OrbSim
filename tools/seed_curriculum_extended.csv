@@ -1,0 +1,821 @@
+name
+Water
+Hydrogen peroxide
+Oxygen
+Nitrogen
+Carbon dioxide
+Carbon monoxide
+Methane
+Ethane
+Propane
+Butane
+Pentane
+Hexane
+Heptane
+Octane
+Nonane
+Decane
+Ethanol
+Methanol
+Isopropyl alcohol
+Acetone
+Acetic acid
+Formic acid
+Sulfuric acid
+Hydrochloric acid
+Nitric acid
+Phosphoric acid
+Ammonia
+Sodium hydroxide
+Potassium hydroxide
+Calcium hydroxide
+Sodium bicarbonate
+Sodium carbonate
+Calcium carbonate
+Magnesium carbonate
+Sodium chloride
+Potassium chloride
+Calcium chloride
+Magnesium chloride
+Sodium sulfate
+Potassium sulfate
+Magnesium sulfate
+Calcium sulfate
+Sodium nitrate
+Potassium nitrate
+Ammonium nitrate
+Sodium phosphate
+Potassium phosphate
+Calcium phosphate
+Sodium hypochlorite
+Calcium hypochlorite
+Sodium fluoride
+Potassium fluoride
+Sodium bromide
+Potassium bromide
+Sodium iodide
+Potassium iodide
+Sodium acetate
+Potassium acetate
+Calcium acetate
+Ammonium acetate
+Sodium citrate
+Citric acid
+Glucose
+Fructose
+Sucrose
+Lactose
+Maltose
+Glycine
+Alanine
+Serine
+Aspartic acid
+Glutamic acid
+Sodium glutamate
+Urea
+Creatine
+Caffeine
+Aspirin
+Ibuprofen
+Paracetamol
+Lactic acid
+Glycerol
+Ethylene glycol
+Propylene glycol
+Acetaldehyde
+Formaldehyde
+Benzene
+Toluene
+Xylene
+Phenol
+Aniline
+Pyridine
+Acetonitrile
+Dimethyl sulfoxide
+Dimethylformamide
+Chloroform
+Dichloromethane
+Carbon tetrachloride
+Acetic anhydride
+Sodium nitrite
+Sodium sulfite
+Sodium thiosulfate
+Sodium sulfide
+Hydrogen sulfide
+Sulfur dioxide
+Sodium borate
+Boric acid
+Sodium silicate
+Silicon dioxide
+Aluminum oxide
+Iron(III) oxide
+Iron(II) oxide
+Copper(II) sulfate
+Copper(II) chloride
+Zinc sulfate
+Zinc chloride
+Lead(II) nitrate
+Silver nitrate
+Mercury(II) chloride
+Sodium permanganate
+Potassium permanganate
+Sodium chromate
+Potassium dichromate
+Calcium oxide
+Magnesium oxide
+Sodium azide
+Sodium cyanide
+Potassium cyanide
+Hydrogen cyanide
+Sodium iodate
+Potassium iodate
+Sodium chlorate
+Potassium chlorate
+Sodium perchlorate
+Potassium perchlorate
+Sodium bromate
+Potassium bromate
+Potassium nitrite
+Ammonium chloride
+Ammonium sulfate
+Ammonium carbonate
+Ammonium bicarbonate
+Ammonium phosphate
+Sodium metabisulfite
+Sodium bisulfate
+Sodium bisulfite
+Sodium bisulfate hydrate
+Sodium carbonate decahydrate
+Copper(II) sulfate pentahydrate
+Magnesium sulfate heptahydrate
+Calcium chloride dihydrate
+Sodium thiosulfate pentahydrate
+Sodium acetate trihydrate
+Sodium tetraborate decahydrate
+Calcium sulfate dihydrate
+Calcium nitrate tetrahydrate
+Aluminum sulfate
+Aluminum chloride
+Aluminum nitrate
+Potassium alum
+Sodium alum
+Sodium benzoate
+Benzoic acid
+Salicylic acid
+Oxalic acid
+Malonic acid
+Succinic acid
+Fumaric acid
+Maleic acid
+Tartaric acid
+Sodium tartrate
+Potassium sodium tartrate
+Sodium lactate
+Potassium lactate
+Calcium lactate
+Sodium succinate
+Sodium formate
+Sodium propionate
+Sodium butyrate
+Sodium valproate
+Glycolic acid
+Malic acid
+Phthalic acid
+Adipic acid
+Caprolactam
+Polyethylene glycol
+Sodium lauryl sulfate
+Sodium dodecyl sulfate
+Sodium stearate
+Calcium stearate
+Magnesium stearate
+Sodium palmitate
+Potassium sorbate
+Sorbic acid
+Sodium ascorbate
+Ascorbic acid
+Sodium chloride brine
+Hydrogen peroxide solution
+Sodium hydroxide solution
+Sodium hydrogen phosphate
+Sodium dihydrogen phosphate
+Sodium oxalate
+Sodium salicylate
+Sodium dichromate
+Sodium thiocyanate
+Potassium sulfite
+Potassium thiosulfate
+Potassium carbonate
+Potassium bicarbonate
+Potassium hydrogen phosphate
+Potassium dihydrogen phosphate
+Potassium formate
+Potassium propionate
+Potassium butyrate
+Potassium oxalate
+Potassium citrate
+Potassium tartrate
+Potassium benzoate
+Potassium salicylate
+Potassium chromate
+Potassium borate
+Potassium silicate
+Potassium thiocyanate
+Lithium chloride
+Lithium bromide
+Lithium iodide
+Lithium fluoride
+Lithium nitrate
+Lithium nitrite
+Lithium sulfate
+Lithium sulfite
+Lithium thiosulfate
+Lithium carbonate
+Lithium bicarbonate
+Lithium phosphate
+Lithium hydrogen phosphate
+Lithium dihydrogen phosphate
+Lithium acetate
+Lithium formate
+Lithium propionate
+Lithium butyrate
+Lithium oxalate
+Lithium citrate
+Lithium tartrate
+Lithium lactate
+Lithium benzoate
+Lithium salicylate
+Lithium permanganate
+Lithium chromate
+Lithium dichromate
+Lithium borate
+Lithium silicate
+Lithium chlorate
+Lithium perchlorate
+Lithium bromate
+Lithium iodate
+Lithium cyanide
+Lithium thiocyanate
+Ammonium bromide
+Ammonium iodide
+Ammonium fluoride
+Ammonium nitrite
+Ammonium sulfite
+Ammonium thiosulfate
+Ammonium hydrogen phosphate
+Ammonium dihydrogen phosphate
+Ammonium formate
+Ammonium propionate
+Ammonium butyrate
+Ammonium oxalate
+Ammonium citrate
+Ammonium tartrate
+Ammonium lactate
+Ammonium benzoate
+Ammonium salicylate
+Ammonium permanganate
+Ammonium chromate
+Ammonium dichromate
+Ammonium borate
+Ammonium silicate
+Ammonium chlorate
+Ammonium perchlorate
+Ammonium bromate
+Ammonium iodate
+Ammonium cyanide
+Ammonium thiocyanate
+Calcium bromide
+Calcium iodide
+Calcium fluoride
+Calcium nitrate
+Calcium nitrite
+Calcium sulfite
+Calcium thiosulfate
+Calcium bicarbonate
+Calcium hydrogen phosphate
+Calcium dihydrogen phosphate
+Calcium formate
+Calcium propionate
+Calcium butyrate
+Calcium oxalate
+Calcium citrate
+Calcium tartrate
+Calcium benzoate
+Calcium salicylate
+Calcium permanganate
+Calcium chromate
+Calcium dichromate
+Calcium borate
+Calcium silicate
+Calcium chlorate
+Calcium perchlorate
+Calcium bromate
+Calcium iodate
+Calcium cyanide
+Calcium thiocyanate
+Magnesium bromide
+Magnesium iodide
+Magnesium fluoride
+Magnesium nitrate
+Magnesium nitrite
+Magnesium sulfite
+Magnesium thiosulfate
+Magnesium bicarbonate
+Magnesium phosphate
+Magnesium hydrogen phosphate
+Magnesium dihydrogen phosphate
+Magnesium acetate
+Magnesium formate
+Magnesium propionate
+Magnesium butyrate
+Magnesium oxalate
+Magnesium citrate
+Magnesium tartrate
+Magnesium lactate
+Magnesium benzoate
+Magnesium salicylate
+Magnesium permanganate
+Magnesium chromate
+Magnesium dichromate
+Magnesium borate
+Magnesium silicate
+Magnesium chlorate
+Magnesium perchlorate
+Magnesium bromate
+Magnesium iodate
+Magnesium cyanide
+Magnesium thiocyanate
+Barium chloride
+Barium bromide
+Barium iodide
+Barium fluoride
+Barium nitrate
+Barium nitrite
+Barium sulfate
+Barium sulfite
+Barium thiosulfate
+Barium carbonate
+Barium bicarbonate
+Barium phosphate
+Barium hydrogen phosphate
+Barium dihydrogen phosphate
+Barium acetate
+Barium formate
+Barium propionate
+Barium butyrate
+Barium oxalate
+Barium citrate
+Barium tartrate
+Barium lactate
+Barium benzoate
+Barium salicylate
+Barium permanganate
+Barium chromate
+Barium dichromate
+Barium borate
+Barium silicate
+Barium chlorate
+Barium perchlorate
+Barium bromate
+Barium iodate
+Barium cyanide
+Barium thiocyanate
+Strontium chloride
+Strontium bromide
+Strontium iodide
+Strontium fluoride
+Strontium nitrate
+Strontium nitrite
+Strontium sulfate
+Strontium sulfite
+Strontium thiosulfate
+Strontium carbonate
+Strontium bicarbonate
+Strontium phosphate
+Strontium hydrogen phosphate
+Strontium dihydrogen phosphate
+Strontium acetate
+Strontium formate
+Strontium propionate
+Strontium butyrate
+Strontium oxalate
+Strontium citrate
+Strontium tartrate
+Strontium lactate
+Strontium benzoate
+Strontium salicylate
+Strontium permanganate
+Strontium chromate
+Strontium dichromate
+Strontium borate
+Strontium silicate
+Strontium chlorate
+Strontium perchlorate
+Strontium bromate
+Strontium iodate
+Strontium cyanide
+Strontium thiocyanate
+Zinc bromide
+Zinc iodide
+Zinc fluoride
+Zinc nitrate
+Zinc nitrite
+Zinc sulfite
+Zinc thiosulfate
+Zinc carbonate
+Zinc bicarbonate
+Zinc phosphate
+Zinc hydrogen phosphate
+Zinc dihydrogen phosphate
+Zinc acetate
+Zinc formate
+Zinc propionate
+Zinc butyrate
+Zinc oxalate
+Zinc citrate
+Zinc tartrate
+Zinc lactate
+Zinc benzoate
+Zinc salicylate
+Zinc permanganate
+Zinc chromate
+Zinc dichromate
+Zinc borate
+Zinc silicate
+Zinc chlorate
+Zinc perchlorate
+Zinc bromate
+Zinc iodate
+Zinc cyanide
+Zinc thiocyanate
+Copper(II) bromide
+Copper(II) iodide
+Copper(II) fluoride
+Copper(II) nitrate
+Copper(II) nitrite
+Copper(II) sulfite
+Copper(II) thiosulfate
+Copper(II) carbonate
+Copper(II) bicarbonate
+Copper(II) phosphate
+Copper(II) hydrogen phosphate
+Copper(II) dihydrogen phosphate
+Copper(II) acetate
+Copper(II) formate
+Copper(II) propionate
+Copper(II) butyrate
+Copper(II) oxalate
+Copper(II) citrate
+Copper(II) tartrate
+Copper(II) lactate
+Copper(II) benzoate
+Copper(II) salicylate
+Copper(II) permanganate
+Copper(II) chromate
+Copper(II) dichromate
+Copper(II) borate
+Copper(II) silicate
+Copper(II) chlorate
+Copper(II) perchlorate
+Copper(II) bromate
+Copper(II) iodate
+Copper(II) cyanide
+Copper(II) thiocyanate
+Iron(II) chloride
+Iron(II) bromide
+Iron(II) iodide
+Iron(II) fluoride
+Iron(II) nitrate
+Iron(II) nitrite
+Iron(II) sulfate
+Iron(II) sulfite
+Iron(II) thiosulfate
+Iron(II) carbonate
+Iron(II) bicarbonate
+Iron(II) phosphate
+Iron(II) hydrogen phosphate
+Iron(II) dihydrogen phosphate
+Iron(II) acetate
+Iron(II) formate
+Iron(II) propionate
+Iron(II) butyrate
+Iron(II) oxalate
+Iron(II) citrate
+Iron(II) tartrate
+Iron(II) lactate
+Iron(II) benzoate
+Iron(II) salicylate
+Iron(II) permanganate
+Iron(II) chromate
+Iron(II) dichromate
+Iron(II) borate
+Iron(II) silicate
+Iron(II) chlorate
+Iron(II) perchlorate
+Iron(II) bromate
+Iron(II) iodate
+Iron(II) cyanide
+Iron(II) thiocyanate
+Iron(III) chloride
+Iron(III) bromide
+Iron(III) iodide
+Iron(III) fluoride
+Iron(III) nitrate
+Iron(III) nitrite
+Iron(III) sulfate
+Iron(III) sulfite
+Iron(III) thiosulfate
+Iron(III) carbonate
+Iron(III) bicarbonate
+Iron(III) phosphate
+Iron(III) hydrogen phosphate
+Iron(III) dihydrogen phosphate
+Iron(III) acetate
+Iron(III) formate
+Iron(III) propionate
+Iron(III) butyrate
+Iron(III) oxalate
+Iron(III) citrate
+Iron(III) tartrate
+Iron(III) lactate
+Iron(III) benzoate
+Iron(III) salicylate
+Iron(III) permanganate
+Iron(III) chromate
+Iron(III) dichromate
+Iron(III) borate
+Iron(III) silicate
+Iron(III) chlorate
+Iron(III) perchlorate
+Iron(III) bromate
+Iron(III) iodate
+Iron(III) cyanide
+Iron(III) thiocyanate
+Aluminum bromide
+Aluminum iodide
+Aluminum fluoride
+Aluminum nitrite
+Aluminum sulfite
+Aluminum thiosulfate
+Aluminum carbonate
+Aluminum bicarbonate
+Aluminum phosphate
+Aluminum hydrogen phosphate
+Aluminum dihydrogen phosphate
+Aluminum acetate
+Aluminum formate
+Aluminum propionate
+Aluminum butyrate
+Aluminum oxalate
+Aluminum citrate
+Aluminum tartrate
+Aluminum lactate
+Aluminum benzoate
+Aluminum salicylate
+Aluminum permanganate
+Aluminum chromate
+Aluminum dichromate
+Aluminum borate
+Aluminum silicate
+Aluminum chlorate
+Aluminum perchlorate
+Aluminum bromate
+Aluminum iodate
+Aluminum cyanide
+Aluminum thiocyanate
+Nickel(II) chloride
+Nickel(II) bromide
+Nickel(II) iodide
+Nickel(II) fluoride
+Nickel(II) nitrate
+Nickel(II) nitrite
+Nickel(II) sulfate
+Nickel(II) sulfite
+Nickel(II) thiosulfate
+Nickel(II) carbonate
+Nickel(II) bicarbonate
+Nickel(II) phosphate
+Nickel(II) hydrogen phosphate
+Nickel(II) dihydrogen phosphate
+Nickel(II) acetate
+Nickel(II) formate
+Nickel(II) propionate
+Nickel(II) butyrate
+Nickel(II) oxalate
+Nickel(II) citrate
+Nickel(II) tartrate
+Nickel(II) lactate
+Nickel(II) benzoate
+Nickel(II) salicylate
+Nickel(II) permanganate
+Nickel(II) chromate
+Nickel(II) dichromate
+Nickel(II) borate
+Nickel(II) silicate
+Nickel(II) chlorate
+Nickel(II) perchlorate
+Nickel(II) bromate
+Nickel(II) iodate
+Nickel(II) cyanide
+Nickel(II) thiocyanate
+Cobalt(II) chloride
+Cobalt(II) bromide
+Cobalt(II) iodide
+Cobalt(II) fluoride
+Cobalt(II) nitrate
+Cobalt(II) nitrite
+Cobalt(II) sulfate
+Cobalt(II) sulfite
+Cobalt(II) thiosulfate
+Cobalt(II) carbonate
+Cobalt(II) bicarbonate
+Cobalt(II) phosphate
+Cobalt(II) hydrogen phosphate
+Cobalt(II) dihydrogen phosphate
+Cobalt(II) acetate
+Cobalt(II) formate
+Cobalt(II) propionate
+Cobalt(II) butyrate
+Cobalt(II) oxalate
+Cobalt(II) citrate
+Cobalt(II) tartrate
+Cobalt(II) lactate
+Cobalt(II) benzoate
+Cobalt(II) salicylate
+Cobalt(II) permanganate
+Cobalt(II) chromate
+Cobalt(II) dichromate
+Cobalt(II) borate
+Cobalt(II) silicate
+Cobalt(II) chlorate
+Cobalt(II) perchlorate
+Cobalt(II) bromate
+Cobalt(II) iodate
+Cobalt(II) cyanide
+Cobalt(II) thiocyanate
+Manganese(II) chloride
+Manganese(II) bromide
+Manganese(II) iodide
+Manganese(II) fluoride
+Manganese(II) nitrate
+Manganese(II) nitrite
+Manganese(II) sulfate
+Manganese(II) sulfite
+Manganese(II) thiosulfate
+Manganese(II) carbonate
+Manganese(II) bicarbonate
+Manganese(II) phosphate
+Manganese(II) hydrogen phosphate
+Manganese(II) dihydrogen phosphate
+Manganese(II) acetate
+Manganese(II) formate
+Manganese(II) propionate
+Manganese(II) butyrate
+Manganese(II) oxalate
+Manganese(II) citrate
+Manganese(II) tartrate
+Manganese(II) lactate
+Manganese(II) benzoate
+Manganese(II) salicylate
+Manganese(II) permanganate
+Manganese(II) chromate
+Manganese(II) dichromate
+Manganese(II) borate
+Manganese(II) silicate
+Manganese(II) chlorate
+Manganese(II) perchlorate
+Manganese(II) bromate
+Manganese(II) iodate
+Manganese(II) cyanide
+Manganese(II) thiocyanate
+Lead(II) chloride
+Lead(II) bromide
+Lead(II) iodide
+Lead(II) fluoride
+Lead(II) nitrite
+Lead(II) sulfate
+Lead(II) sulfite
+Lead(II) thiosulfate
+Lead(II) carbonate
+Lead(II) bicarbonate
+Lead(II) phosphate
+Lead(II) hydrogen phosphate
+Lead(II) dihydrogen phosphate
+Lead(II) acetate
+Lead(II) formate
+Lead(II) propionate
+Lead(II) butyrate
+Lead(II) oxalate
+Lead(II) citrate
+Lead(II) tartrate
+Lead(II) lactate
+Lead(II) benzoate
+Lead(II) salicylate
+Lead(II) permanganate
+Lead(II) chromate
+Lead(II) dichromate
+Lead(II) borate
+Lead(II) silicate
+Lead(II) chlorate
+Lead(II) perchlorate
+Lead(II) bromate
+Lead(II) iodate
+Lead(II) cyanide
+Lead(II) thiocyanate
+Tin(II) chloride
+Tin(II) bromide
+Tin(II) iodide
+Tin(II) fluoride
+Tin(II) nitrate
+Tin(II) nitrite
+Tin(II) sulfate
+Tin(II) sulfite
+Tin(II) thiosulfate
+Tin(II) carbonate
+Tin(II) bicarbonate
+Tin(II) phosphate
+Tin(II) hydrogen phosphate
+Tin(II) dihydrogen phosphate
+Tin(II) acetate
+Tin(II) formate
+Tin(II) propionate
+Tin(II) butyrate
+Tin(II) oxalate
+Tin(II) citrate
+Tin(II) tartrate
+Tin(II) lactate
+Tin(II) benzoate
+Tin(II) salicylate
+Tin(II) permanganate
+Tin(II) chromate
+Tin(II) dichromate
+Tin(II) borate
+Tin(II) silicate
+Tin(II) chlorate
+Tin(II) perchlorate
+Tin(II) bromate
+Tin(II) iodate
+Tin(II) cyanide
+Tin(II) thiocyanate
+Chromium(III) chloride
+Chromium(III) bromide
+Chromium(III) iodide
+Chromium(III) fluoride
+Chromium(III) nitrate
+Chromium(III) nitrite
+Chromium(III) sulfate
+Chromium(III) sulfite
+Chromium(III) thiosulfate
+Chromium(III) carbonate
+Chromium(III) bicarbonate
+Chromium(III) phosphate
+Chromium(III) hydrogen phosphate
+Chromium(III) dihydrogen phosphate
+Chromium(III) acetate
+Chromium(III) formate
+Chromium(III) propionate
+Chromium(III) butyrate
+Chromium(III) oxalate
+Chromium(III) citrate
+Chromium(III) tartrate
+Chromium(III) lactate
+Chromium(III) benzoate
+Chromium(III) salicylate
+Chromium(III) permanganate
+Chromium(III) chromate
+Chromium(III) dichromate
+Chromium(III) borate
+Chromium(III) silicate
+Chromium(III) chlorate
+Chromium(III) perchlorate
+Chromium(III) bromate
+Chromium(III) iodate
+Chromium(III) cyanide
+Chromium(III) thiocyanate
+Silver chloride
+Silver bromide
+Silver iodide
+Silver fluoride
+Silver nitrite
+Silver sulfate
+Silver sulfite
+Silver thiosulfate
+Silver carbonate
+Silver bicarbonate
+Silver phosphate
+Silver hydrogen phosphate
+Silver dihydrogen phosphate
+Silver acetate
+Silver formate
+Silver propionate
+Silver butyrate
+Silver oxalate
+Silver citrate
+Silver tartrate
+Silver lactate
+Silver benzoate
+Silver salicylate
+Silver permanganate
+Silver chromate
+Silver dichromate
+Silver borate
