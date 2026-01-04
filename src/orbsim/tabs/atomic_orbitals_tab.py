@@ -926,11 +926,17 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
             return
         prob_arr = np.asarray(vol_field.dataset.get_array("probability"))
         vmax = float(np.nanmax(prob_arr)) if prob_arr.size else 1.0
-        if vmax <= 0:
-            vmax = 1.0
-        clim = (0.0, vmax)
+        vmin = float(np.nanmin(prob_arr)) if prob_arr.size else 0.0
+        if vmax <= vmin:
+            vmax = vmin + 1e-6
+        prob_scaled = prob_arr
+        if prob_arr.size:
+            prob_scaled = (prob_arr - vmin) / (vmax - vmin)
+            prob_scaled = np.nan_to_num(prob_scaled, nan=0.0, posinf=0.0, neginf=0.0)
+            vol_field.dataset["probability_scaled"] = prob_scaled
+        clim = (0.0, 1.0) if prob_arr.size else (0.0, vmax)
         label = "Electron Density"
-        self._add_volume_render(vol_field, prob_arr)
+        self._add_volume_render(vol_field, prob_scaled)
         main_title = f"{self.current_symbol} n={self.current_n}, l={self.current_l}, m={self.current_m}"
         if self.show_occupied:
             main_title += " (occupied)"
@@ -1126,6 +1132,11 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
 
     def _add_volume_render(self, volume_field, values: np.ndarray) -> None:
         dataset = volume_field.dataset
+        if "probability_scaled" in dataset.array_names:
+            try:
+                dataset.set_active_scalars("probability_scaled")
+            except Exception:
+                pass
         vmin = float(np.nanmin(values)) if values.size else 0.0
         vmax = float(np.nanmax(values)) if values.size else 1.0
         if vmax <= vmin:
@@ -1344,9 +1355,16 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
                 return zeros
 
             prob_vals = _ensure_array("probability")
+            prob_scaled_vals = None
+            try:
+                prob_scaled_vals = _ensure_array("probability_scaled")
+            except Exception:
+                prob_scaled_vals = None
             amp_vals = _ensure_array("amplitude")
             phase_vals = _ensure_array("phase")
             prob_vals = np.nan_to_num(prob_vals, nan=0.0, posinf=0.0, neginf=0.0)
+            if prob_scaled_vals is not None:
+                prob_scaled_vals = np.nan_to_num(prob_scaled_vals, nan=0.0, posinf=0.0, neginf=0.0)
             amp_vals = np.nan_to_num(amp_vals, nan=0.0, posinf=0.0, neginf=0.0)
             phase_vals = np.nan_to_num(phase_vals, nan=0.0, posinf=0.0, neginf=0.0)
             cum_vals = np.zeros_like(prob_vals, dtype=float)
@@ -1362,7 +1380,7 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
             slice_cmap = self.current_cmap
             slice_clim = clim
             scalar_name = "probability"
-            scalar_data = prob_vals
+            scalar_data = prob_scaled_vals if prob_scaled_vals is not None else prob_vals
             label = "Electron Density"
 
             if self.slice_scalar_mode == "cumulative":
@@ -1386,9 +1404,12 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
                 slice_clim = (-np.pi, np.pi)
                 label = "Phase"
             else:
+                if prob_scaled_vals is not None and prob_scaled_vals.size:
+                    slice_clim = (0.0, 1.0)
                 if self.slice_vmin is not None or self.slice_vmax is not None:
-                    vmin = self.slice_vmin if self.slice_vmin is not None else float(np.nanmin(prob_vals))
-                    vmax = self.slice_vmax if self.slice_vmax is not None else float(np.nanmax(prob_vals))
+                    source_vals = scalar_data if scalar_data is not None else prob_vals
+                    vmin = self.slice_vmin if self.slice_vmin is not None else float(np.nanmin(source_vals))
+                    vmax = self.slice_vmax if self.slice_vmax is not None else float(np.nanmax(source_vals))
                     if vmax <= vmin:
                         vmax = vmin + 1e-6
                     slice_clim = (vmin, vmax)
