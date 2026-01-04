@@ -5,6 +5,7 @@ import sys
 
 from PySide6 import QtCore, QtWidgets
 
+from orbsim.chem import compound_db
 from orbsim.chem.compound_db import db_exists, get_compound_details, get_db_path, query_compounds_by_elements
 from orbsim.chem.elements import get_atomic_number, get_symbol
 from orbsim.chem.formula_parser import parse_formula
