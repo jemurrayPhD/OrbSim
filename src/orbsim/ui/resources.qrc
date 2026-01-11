@@ -1,0 +1,7 @@
+<RCC>
+  <qresource prefix="/icons">
+    <file>../assets/icons/plus.svg</file>
+    <file>../assets/icons/minus.svg</file>
+    <file>../assets/icons/trash.svg</file>
+  </qresource>
+</RCC>

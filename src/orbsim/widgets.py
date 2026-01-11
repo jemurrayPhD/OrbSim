@@ -9,61 +9,67 @@ import pyvista as pv
 from PySide6 import QtCore, QtGui, QtNetwork, QtWidgets
 from pyvistaqt import QtInteractor
 
-from orbsim.chem.elements import (
-    ATOMIC_NUMBER_TO_SYMBOL,
-    ELEMENTS_H_KR,
-    electronegativity,
-    is_metal,
-    is_nonmetal,
-)
+from orbsim.chem.elements import get_atomic_number, get_element, get_name, get_symbol
+from orbsim.theming.theme_manager import get_theme_manager
+from orbsim.chem import compound_db
+from orbsim.resources import load_icon
 
 @dataclass(frozen=True)
 class Element:
-    symbol: str
-    name: str
     atomic_number: int
 
 
-PERIODIC_TABLE = [
-    Element("H", "Hydrogen", 1),
-    Element("He", "Helium", 2),
-    Element("Li", "Lithium", 3),
-    Element("Be", "Beryllium", 4),
-    Element("B", "Boron", 5),
-    Element("C", "Carbon", 6),
-    Element("N", "Nitrogen", 7),
-    Element("O", "Oxygen", 8),
-    Element("F", "Fluorine", 9),
-    Element("Ne", "Neon", 10),
-    Element("Na", "Sodium", 11),
-    Element("Mg", "Magnesium", 12),
-    Element("Al", "Aluminum", 13),
-    Element("Si", "Silicon", 14),
-    Element("P", "Phosphorus", 15),
-    Element("S", "Sulfur", 16),
-    Element("Cl", "Chlorine", 17),
-    Element("Ar", "Argon", 18),
-]
+def _element_family(symbol: str) -> str:
+    atomic_number = get_atomic_number(symbol)
+    if atomic_number <= 0:
+        return ""
+    element = get_element(atomic_number)
+    return str(element.get("family") or element.get("category") or element.get("categoryName") or "")
+
+
+def _is_metal_symbol(symbol: str) -> bool:
+    family = _element_family(symbol).lower()
+    return "metal" in family and "nonmetal" not in family and "metalloid" not in family
+
+
+def _is_nonmetal_symbol(symbol: str) -> bool:
+    family = _element_family(symbol).lower()
+    return "nonmetal" in family or "non-metal" in family
+
+
+def _electronegativity_symbol(symbol: str) -> float | None:
+    atomic_number = get_atomic_number(symbol)
+    if atomic_number <= 0:
+        return None
+    element = get_element(atomic_number)
+    value = element.get("electronegativity")
+    try:
+        return None if value in (None, "", "-") else float(value)
+    except Exception:
+        return None
+
+
+PERIODIC_TABLE = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
 
 _PERIODIC_POSITIONS = {
-    "H": (0, 0),
-    "He": (0, 17),
-    "Li": (1, 0),
-    "Be": (1, 1),
-    "B": (1, 12),
-    "C": (1, 13),
-    "N": (1, 14),
-    "O": (1, 15),
-    "F": (1, 16),
-    "Ne": (1, 17),
-    "Na": (2, 0),
-    "Mg": (2, 1),
-    "Al": (2, 12),
-    "Si": (2, 13),
-    "P": (2, 14),
-    "S": (2, 15),
-    "Cl": (2, 16),
-    "Ar": (2, 17),
+    1: (0, 0),
+    2: (0, 17),
+    3: (1, 0),
+    4: (1, 1),
+    5: (1, 12),
+    6: (1, 13),
+    7: (1, 14),
+    8: (1, 15),
+    9: (1, 16),
+    10: (1, 17),
+    11: (2, 0),
+    12: (2, 1),
+    13: (2, 12),
+    14: (2, 13),
+    15: (2, 14),
+    16: (2, 15),
+    17: (2, 16),
+    18: (2, 17),
 }
 
 
@@ -109,13 +115,14 @@ class PeriodicTableWidget(QtWidgets.QTableWidget):
             self.setRowHeight(row, 38)
 
     def _populate(self) -> None:
-        for element in PERIODIC_TABLE:
-            position = _PERIODIC_POSITIONS.get(element.symbol)
+        for atomic_number in PERIODIC_TABLE:
+            position = _PERIODIC_POSITIONS.get(atomic_number)
             if position is None:
                 continue
             row, col = position
-            item = QtWidgets.QTableWidgetItem(f"{element.symbol}\n{element.atomic_number}")
-            item.setData(QtCore.Qt.ItemDataRole.UserRole, element)
+            symbol = get_symbol(atomic_number)
+            item = QtWidgets.QTableWidgetItem(f"{symbol}\n{atomic_number}")
+            item.setData(QtCore.Qt.ItemDataRole.UserRole, Element(atomic_number))
             item.setTextAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
             item.setFlags(
                 QtCore.Qt.ItemFlag.ItemIsSelectable
@@ -141,7 +148,7 @@ class PeriodicTableWidget(QtWidgets.QTableWidget):
         if not element:
             return
         mime = QtCore.QMimeData()
-        mime.setText(element.symbol)
+        mime.setText(get_symbol(element.atomic_number))
         drag = QtGui.QDrag(self)
         drag.setMimeData(mime)
         drag.exec(supported_actions)
@@ -420,6 +427,19 @@ class ElementTileWidget(QtWidgets.QFrame):
         super().__init__(parent)
         self.element = element
         self._theme_tokens: dict | None = None
+        self._theme_colors = {
+            "surface": "#ffffff",
+            "surfaceAlt": "#eef2f7",
+            "border": "#cbd5e1",
+            "text": "#0f172a",
+            "textMuted": "#4b5563",
+            "focusRing": "#0ea5e9",
+        }
+        self._border_thickness = 1
+        self._show_atomic_number = True
+        self._count = 0
+        self._show_count_badge = False
+        self._square = False
         self.setObjectName("inventoryElementTile")
         self.setFrameShape(QtWidgets.QFrame.Shape.StyledPanel)
         self.setFrameShadow(QtWidgets.QFrame.Shadow.Raised)
@@ -428,39 +448,117 @@ class ElementTileWidget(QtWidgets.QFrame):
         self._drag_start_pos: QtCore.QPoint | None = None
         self._dragging = False
 
-        layout = QtWidgets.QGridLayout(self)
-        layout.setContentsMargins(6, 6, 6, 6)
-        layout.setSpacing(2)
-        self.symbol_label = QtWidgets.QLabel(element.symbol)
-        self.symbol_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        self.number_label = QtWidgets.QLabel(str(element.atomic_number))
-        self.number_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(self.symbol_label, 0, 0, 1, 2)
-        layout.addWidget(self.number_label, 1, 0, 1, 2)
-
     def apply_theme(self, tokens: dict) -> None:
         self._theme_tokens = tokens
         colors = tokens["colors"]
-        radii = tokens["radii"]
-        self.setStyleSheet(
-            "QFrame#inventoryElementTile {"
-            f"background: {colors['surfaceAlt']};"
-            f"color: {colors['text']};"
-            f"border: 1px solid {colors['border']};"
-            f"border-radius: {radii['sm']}px;"
-            "}"
-            "QFrame#inventoryElementTile:focus {"
-            f"outline: 2px solid {colors['focusRing']};"
-            "}"
-        )
-        font = self.symbol_label.font()
-        font.setBold(True)
-        font.setPointSize(font.pointSize() + 4)
-        self.symbol_label.setFont(font)
-        number_font = self.number_label.font()
-        number_font.setPointSize(max(number_font.pointSize() - 2, 7))
-        number_font.setBold(False)
-        self.number_label.setFont(number_font)
+        self._theme_colors.update(colors)
+        self._border_thickness = int(tokens.get("radii", {}).get("sm", 1)) if tokens else 1
+        self.update()
+
+    def set_show_atomic_number(self, show: bool) -> None:
+        self._show_atomic_number = show
+        self.update()
+
+    def set_count(self, count: int, show_badge: bool = True) -> None:
+        self._count = max(int(count), 0)
+        self._show_count_badge = show_badge
+        self.update()
+
+    def set_square(self, enabled: bool) -> None:
+        self._square = enabled
+        self.updateGeometry()
+
+    def hasHeightForWidth(self) -> bool:
+        return self._square
+
+    def heightForWidth(self, width: int) -> int:
+        return width if self._square else super().heightForWidth(width)
+
+    def sizeHint(self) -> QtCore.QSize:
+        base = super().sizeHint()
+        if self._square:
+            size = max(base.width(), base.height(), 76)
+            return QtCore.QSize(size, size)
+        return base
+
+    def paintEvent(self, event: QtGui.QPaintEvent) -> None:
+        painter = QtGui.QPainter(self)
+        try:
+            painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
+            rect = self.rect().adjusted(1, 1, -1, -1)
+            radius = 0 if self._square else 6
+            base = QtGui.QColor(self._theme_colors["surfaceAlt"])
+            highlight = base.lighter(112)
+            shadow = base.darker(112)
+            painter.setPen(QtGui.QPen(QtGui.QColor(self._theme_colors["border"]), self._border_thickness))
+            if self.element.atomic_number <= 0:
+                painter.setBrush(QtCore.Qt.NoBrush)
+                painter.drawRoundedRect(rect, radius, radius)
+            else:
+                painter.setBrush(QtGui.QBrush(base))
+                painter.drawRoundedRect(rect, radius, radius)
+                chamfer_rect = rect.adjusted(1, 1, -1, -1)
+                painter.setPen(QtGui.QPen(highlight, 1))
+                painter.drawLine(chamfer_rect.topLeft(), chamfer_rect.topRight())
+                painter.drawLine(chamfer_rect.topLeft(), chamfer_rect.bottomLeft())
+                painter.setPen(QtGui.QPen(shadow, 1))
+                painter.drawLine(chamfer_rect.bottomLeft(), chamfer_rect.bottomRight())
+                painter.drawLine(chamfer_rect.topRight(), chamfer_rect.bottomRight())
+
+            manager = get_theme_manager()
+            slot_texture = manager.texture_path("slot")
+            if slot_texture:
+                pix = QtGui.QPixmap(slot_texture)
+                if not pix.isNull():
+                    painter.save()
+                    painter.setOpacity(0.2)
+                    painter.drawPixmap(rect, pix)
+                    painter.restore()
+
+            if self.hasFocus():
+                painter.setPen(QtGui.QPen(QtGui.QColor(self._theme_colors["focusRing"]), 2))
+                painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), radius, radius)
+
+            if self.element.atomic_number > 0:
+                symbol = get_symbol(self.element.atomic_number)
+                text_color = QtGui.QColor(self._theme_colors["text"])
+                painter.setPen(text_color)
+                font = painter.font()
+                font.setBold(True)
+                font.setPointSize(max(font.pointSize() + 4, 10))
+                painter.setFont(font)
+                painter.drawText(rect, QtCore.Qt.AlignmentFlag.AlignCenter, symbol)
+
+            if self._show_atomic_number and self.element.atomic_number > 0:
+                small_font = painter.font()
+                small_font.setBold(False)
+                small_font.setPointSize(max(small_font.pointSize() - 4, 7))
+                painter.setFont(small_font)
+                painter.setPen(QtGui.QColor(self._theme_colors["textMuted"]))
+                painter.drawText(rect.adjusted(6, 4, -6, -4), QtCore.Qt.AlignmentFlag.AlignTop | QtCore.Qt.AlignmentFlag.AlignLeft, str(self.element.atomic_number))
+
+            if self._show_count_badge and self._count > 1:
+                badge_text = str(self._count)
+                badge_font = painter.font()
+                badge_font.setBold(True)
+                badge_font.setPointSize(max(badge_font.pointSize() - 2, 7))
+                painter.setFont(badge_font)
+                metrics = painter.fontMetrics()
+                badge_width = max(18, metrics.horizontalAdvance(badge_text) + 8)
+                badge_height = max(14, metrics.height())
+                badge_rect = QtCore.QRectF(
+                    rect.right() - badge_width - 6,
+                    rect.top() + 6,
+                    badge_width,
+                    badge_height,
+                )
+                painter.setPen(QtCore.Qt.NoPen)
+                painter.setBrush(QtGui.QBrush(QtGui.QColor(self._theme_colors["surface"])))
+                painter.drawRoundedRect(badge_rect, 6, 6)
+                painter.setPen(QtGui.QPen(QtGui.QColor(self._theme_colors["text"])))
+                painter.drawText(badge_rect, QtCore.Qt.AlignmentFlag.AlignCenter, badge_text)
+        finally:
+            painter.end()
 
     def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:
         if event.button() == QtCore.Qt.MouseButton.LeftButton:
@@ -487,10 +585,10 @@ class ElementTileWidget(QtWidgets.QFrame):
         super().mouseReleaseEvent(event)
 
     def _start_drag(self) -> None:
-        payload = json.dumps({"Z": self.element.atomic_number, "symbol": self.element.symbol}).encode("utf-8")
+        payload = json.dumps({"Z": self.element.atomic_number}).encode("utf-8")
         mime = QtCore.QMimeData()
         mime.setData("application/x-orbsim-element", payload)
-        mime.setText(self.element.symbol)
+        mime.setText(get_symbol(self.element.atomic_number))
         drag = QtGui.QDrag(self)
         drag.setMimeData(mime)
         drag.setPixmap(self.grab())
@@ -514,8 +612,9 @@ class InventoryPeriodicTableWidget(QtWidgets.QScrollArea):
 
     def _populate(self) -> None:
         columns = 6
-        for index, element in enumerate(ELEMENTS_H_KR):
-            tile = ElementTileWidget(Element(element.symbol, element.name, element.atomic_number), self._content)
+        for index, atomic_number in enumerate(range(1, 37)):
+            tile = ElementTileWidget(Element(atomic_number), self._content)
+            tile.set_show_atomic_number(True)
             row = index // columns
             col = index % columns
             self._layout.addWidget(tile, row, col)
@@ -577,7 +676,7 @@ class CraftingSlotWidget(QtWidgets.QFrame):
     def set_element(self, element: Element | None) -> None:
         self._element = element
         if element:
-            self.label.setText(element.symbol)
+            self.label.setText(get_symbol(element.atomic_number))
         else:
             self.label.setText("")
         self.element_changed.emit()
@@ -674,10 +773,10 @@ class CraftingGridWidget(QtWidgets.QWidget):
         for slot in self._slots:
             slot.clear_element()
         for element_number, slot in zip(atomic_numbers, self._slots, strict=False):
-            symbol = ATOMIC_NUMBER_TO_SYMBOL.get(element_number)
+            symbol = get_symbol(element_number)
             if not symbol:
                 continue
-            slot.set_element(Element(symbol, symbol, element_number))
+            slot.set_element(Element(element_number))
 
     def clear(self) -> None:
         for slot in self._slots:
@@ -689,15 +788,12 @@ def _element_from_mime(mime: QtCore.QMimeData) -> Element | None:
         return None
     try:
         payload = json.loads(bytes(mime.data("application/x-orbsim-element")).decode("utf-8"))
-        symbol = payload.get("symbol")
         atomic_number = int(payload.get("Z"))
     except Exception:
         return None
-    if not symbol:
-        symbol = ATOMIC_NUMBER_TO_SYMBOL.get(atomic_number, "")
-    if not symbol:
+    if atomic_number <= 0:
         return None
-    return Element(symbol, symbol, atomic_number)
+    return Element(atomic_number)
 
 
 
@@ -707,39 +803,59 @@ class CraftingTableSlotWidget(QtWidgets.QFrame):
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
+        self.setMinimumSize(84, 84)
+        self.setSizePolicy(QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed)
         self.setAcceptDrops(True)
         self.setObjectName("craftingTableSlot")
         self._theme_tokens: dict | None = None
         self.atomic_number: int | None = None
         self.count = 0
 
-        self.symbol_label = QtWidgets.QLabel("")
-        self.symbol_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        self.symbol_label.setObjectName("craftingSlotSymbol")
-        self.count_label = QtWidgets.QLabel("")
-        self.count_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignBottom)
-        self.count_label.setObjectName("craftingSlotCount")
+        self.tile = ElementTileWidget(Element(0), self)
+        self.tile.set_show_atomic_number(False)
+        self.tile.set_square(True)
+        self.tile.setEnabled(False)
+        self.tile.setMinimumSize(84, 84)
 
         self.add_button = QtWidgets.QToolButton()
-        self.add_button.setText("+")
+        self.add_button.setAutoRaise(True)
+        self.add_button.setIcon(load_icon("plus.svg"))
+        self.add_button.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonIconOnly)
+        self.add_button.setToolTip("Add one")
         self.sub_button = QtWidgets.QToolButton()
-        self.sub_button.setText("−")
+        self.sub_button.setAutoRaise(True)
+        self.sub_button.setIcon(load_icon("minus.svg"))
+        self.sub_button.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonIconOnly)
+        self.sub_button.setToolTip("Remove one")
         self.clear_button = QtWidgets.QToolButton()
-        self.clear_button.setText("🗑")
+        self.clear_button.setAutoRaise(True)
+        self.clear_button.setIcon(load_icon("trash.svg"))
+        self.clear_button.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonIconOnly)
+        self.clear_button.setToolTip("Clear slot")
         self.add_button.clicked.connect(self._increment)
         self.sub_button.clicked.connect(self._decrement)
         self.clear_button.clicked.connect(self.clear_slot)
 
-        layout = QtWidgets.QVBoxLayout(self)
+        layout = QtWidgets.QGridLayout(self)
         layout.setContentsMargins(6, 6, 6, 6)
-        layout.addWidget(self.symbol_label, 1)
+        layout.setSpacing(0)
+        layout.addWidget(self.tile, 0, 0, 1, 1)
 
-        controls = QtWidgets.QHBoxLayout()
+        controls_widget = QtWidgets.QWidget(self)
+        controls = QtWidgets.QHBoxLayout(controls_widget)
         controls.setContentsMargins(0, 0, 0, 0)
+        controls.setSpacing(4)
         controls.addWidget(self.add_button)
         controls.addWidget(self.sub_button)
         controls.addWidget(self.clear_button)
-        layout.addLayout(controls)
+        layout.addWidget(
+            controls_widget,
+            0,
+            0,
+            1,
+            1,
+            QtCore.Qt.AlignmentFlag.AlignBottom | QtCore.Qt.AlignmentFlag.AlignHCenter,
+        )
 
     def apply_theme(self, tokens: dict) -> None:
         self._theme_tokens = tokens
@@ -755,33 +871,41 @@ class CraftingTableSlotWidget(QtWidgets.QFrame):
             f"outline: 2px solid {colors['focusRing']};"
             "}"
             "QToolButton {"
-            f"background: {colors['surface']};"
-            f"border: 1px solid {colors['border']};"
-            f"border-radius: {radii['sm']}px;"
+            f"color: {colors['text']};"
+            "background: transparent;"
+            "border: 1px solid transparent;"
+            "border-radius: 0;"
+            f"padding: {max(1, tokens['spacing']['xs'] - 2)}px;"
             "}"
-            "QLabel#craftingSlotCount {"
+            "QToolButton:hover {"
             f"background: {colors['surface']};"
             f"border: 1px solid {colors['border']};"
-            f"border-radius: {radii['sm']}px;"
-            f"padding: 1px 4px;"
+            "}"
+            "QToolButton:focus {"
+            f"border: 1px solid {colors['focusRing']};"
             "}"
         )
-        font = self.symbol_label.font()
-        font.setPointSize(font.pointSize() + 6)
-        font.setBold(True)
-        self.symbol_label.setFont(font)
+        self.tile.apply_theme(tokens)
+        icon_size = max(12, int(tokens["spacing"]["md"]))
+        button_size = max(icon_size + 8, 20)
+        for button in (self.add_button, self.sub_button, self.clear_button):
+            button.setIconSize(QtCore.QSize(icon_size, icon_size))
+            button.setFixedSize(button_size, button_size)
 
-    def set_element(self, atomic_number: int, symbol: str, count: int = 1) -> None:
+    def set_element(self, atomic_number: int, count: int = 1) -> None:
         self.atomic_number = atomic_number
-        self.symbol_label.setText(symbol)
         self.count = max(count, 1)
+        self.tile.element = Element(atomic_number)
+        self.tile.set_show_atomic_number(False)
+        self.tile.setEnabled(True)
         self._update_count()
         self.slot_changed.emit()
 
     def clear_slot(self) -> None:
         self.atomic_number = None
-        self.symbol_label.setText("")
         self.count = 0
+        self.tile.element = Element(0)
+        self.tile.setEnabled(False)
         self._update_count()
         self.slot_changed.emit()
 
@@ -803,9 +927,10 @@ class CraftingTableSlotWidget(QtWidgets.QFrame):
         self.slot_changed.emit()
 
     def _update_count(self) -> None:
-        self.count_label.setText(f"×{self.count}" if self.count > 0 else "")
-        self.count_label.adjustSize()
-        self.count_label.move(self.width() - self.count_label.width() - 6, self.height() - self.count_label.height() - 6)
+        if self.atomic_number is None:
+            self.tile.set_count(0, show_badge=False)
+            return
+        self.tile.set_count(self.count, show_badge=True)
 
     def resizeEvent(self, event: QtGui.QResizeEvent) -> None:
         super().resizeEvent(event)
@@ -823,11 +948,11 @@ class CraftingTableSlotWidget(QtWidgets.QFrame):
             event.ignore()
             return
         if self.atomic_number is None:
-            self.set_element(element.atomic_number, element.symbol, 1)
+            self.set_element(element.atomic_number, 1)
         elif self.atomic_number == element.atomic_number:
             self._increment()
         else:
-            self.set_element(element.atomic_number, element.symbol, 1)
+            self.set_element(element.atomic_number, 1)
         event.acceptProposedAction()
 
 
@@ -842,6 +967,9 @@ class CraftingTableWidget(QtWidgets.QWidget):
         layout = QtWidgets.QGridLayout(self)
         layout.setSpacing(8)
         layout.setContentsMargins(4, 4, 4, 4)
+        min_slot = 84
+        min_size = min_slot * 3 + layout.spacing() * 2 + layout.contentsMargins().left() + layout.contentsMargins().right()
+        self.setMinimumSize(min_size, min_size)
         self._slots: list[CraftingTableSlotWidget] = []
         for row in range(3):
             for col in range(3):
@@ -849,6 +977,9 @@ class CraftingTableWidget(QtWidgets.QWidget):
                 slot.slot_changed.connect(self._emit_change)
                 layout.addWidget(slot, row, col)
                 self._slots.append(slot)
+            layout.setRowMinimumHeight(row, min_slot)
+        for col in range(3):
+            layout.setColumnMinimumWidth(col, min_slot)
 
     def apply_theme(self, tokens: dict) -> None:
         self._theme_tokens = tokens
@@ -862,10 +993,10 @@ class CraftingTableWidget(QtWidgets.QWidget):
         for slot in self._slots:
             slot.apply_theme(tokens)
 
-    def add_element_to_first_empty(self, atomic_number: int, symbol: str) -> None:
+    def add_element_to_first_empty(self, atomic_number: int) -> None:
         for slot in self._slots:
             if slot.atomic_number is None:
-                slot.set_element(atomic_number, symbol, 1)
+                slot.set_element(atomic_number, 1)
                 return
         QtWidgets.QMessageBox.information(self, "Crafting full", "No empty slots available in the 3×3 grid.")
 
@@ -875,8 +1006,7 @@ class CraftingTableWidget(QtWidgets.QWidget):
         for idx, (atomic_number, count) in enumerate(counts.items()):
             if idx >= len(self._slots):
                 break
-            symbol = ATOMIC_NUMBER_TO_SYMBOL.get(atomic_number, str(atomic_number))
-            self._slots[idx].set_element(atomic_number, symbol, count)
+            self._slots[idx].set_element(atomic_number, count)
         self._emit_change()
 
     def counts(self) -> dict[int, int]:
@@ -912,7 +1042,7 @@ class CraftingTableWidget(QtWidgets.QWidget):
         if not element:
             event.ignore()
             return
-        self.add_element_to_first_empty(element.atomic_number, element.symbol)
+        self.add_element_to_first_empty(element.atomic_number)
         event.acceptProposedAction()
 
     def _emit_change(self) -> None:
@@ -1062,7 +1192,7 @@ class AggregatedCraftingGridWidget(QtWidgets.QWidget):
         if len(self._counts) >= 9:
             QtWidgets.QMessageBox.information(self, "Crafting full", "Maximum of 9 distinct elements in the grid.")
             return
-        symbol = ATOMIC_NUMBER_TO_SYMBOL.get(atomic_number, str(atomic_number))
+        symbol = get_symbol(atomic_number)
         slot = AggregatedCraftingSlotWidget(atomic_number, symbol, self)
         slot.add_one.connect(self._handle_add_one)
         slot.remove_one.connect(self._handle_remove_one)
@@ -1190,6 +1320,7 @@ class PeriodicTableInventoryWidget(QtWidgets.QScrollArea):
         self._layout = QtWidgets.QGridLayout(self._content)
         self._layout.setContentsMargins(6, 6, 6, 6)
         self._layout.setSpacing(4)
+        self._layout.setRowMinimumHeight(7, 24)
         self._populate()
         self.setWidget(self._content)
 
@@ -1198,8 +1329,8 @@ class PeriodicTableInventoryWidget(QtWidgets.QScrollArea):
             from periodic_table_cli.cli import load_data
         except Exception:
             return [
-                {"symbol": element.symbol, "name": element.name, "atomic_number": element.atomic_number}
-                for element in ELEMENTS_H_KR
+                {"symbol": get_symbol(atomic_number), "name": get_name(atomic_number), "atomic_number": atomic_number}
+                for atomic_number in range(1, 37)
             ]
         data = load_data()
         return data.get("elements", [])
@@ -1215,11 +1346,11 @@ class PeriodicTableInventoryWidget(QtWidgets.QScrollArea):
             period = element.get("period")
             group = element.get("group")
             if atomic_number in range(57, 72):
-                row = 7
-                col = atomic_number - 57 + 3
-            elif atomic_number in range(89, 104):
                 row = 8
-                col = atomic_number - 89 + 3
+                col = atomic_number - 57 + 2
+            elif atomic_number in range(89, 104):
+                row = 9
+                col = atomic_number - 89 + 2
             elif period and group:
                 row = int(period) - 1
                 col = int(group) - 1
@@ -1227,11 +1358,20 @@ class PeriodicTableInventoryWidget(QtWidgets.QScrollArea):
                 row, col = _PERIODIC_POSITIONS_FULL[atomic_number]
             else:
                 continue
-            tile = ElementTileWidget(Element(symbol, name, atomic_number), self._content)
-            tile.setMinimumSize(48, 52)
+            tile = ElementTileWidget(Element(atomic_number), self._content)
+            tile.set_show_atomic_number(True)
+            tile.setMinimumSize(52, 56)
             tile.element_clicked.connect(self.element_clicked)
             self._layout.addWidget(tile, row, col)
             self._tiles.append(tile)
+        self._add_placeholders()
+
+    def _add_placeholders(self) -> None:
+        for row, label in ((5, "57–71"), (6, "89–103")):
+            placeholder = QtWidgets.QLabel(f"{label} ↓")
+            placeholder.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+            placeholder.setObjectName("lanActPlaceholder")
+            self._layout.addWidget(placeholder, row, 2)
 
     def apply_theme(self, tokens: dict) -> None:
         self._theme_tokens = tokens
@@ -1247,6 +1387,10 @@ class PeriodicTableInventoryWidget(QtWidgets.QScrollArea):
         )
         for tile in self._tiles:
             tile.apply_theme(tokens)
+        for placeholder in self._content.findChildren(QtWidgets.QLabel, "lanActPlaceholder"):
+            placeholder.setStyleSheet(
+                f"color: {colors['textMuted']}; border: 1px solid {colors['border']};"
+            )
 
 
 class StructureDiagramWidget(QtWidgets.QLabel):
@@ -1370,25 +1514,52 @@ class CompoundPreviewPane(QtWidgets.QWidget):
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
         self._theme_tokens: dict | None = None
+        self._synonyms_full: list[str] = []
         layout = QtWidgets.QVBoxLayout(self)
         layout.setSpacing(8)
 
         header_layout = QtWidgets.QHBoxLayout()
+        header_stack = QtWidgets.QVBoxLayout()
+        self.title_label = QtWidgets.QLabel("")
+        self.title_label.setWordWrap(True)
+        title_font = self.title_label.font()
+        title_font.setPointSize(title_font.pointSize() + 4)
+        title_font.setBold(True)
+        self.title_label.setFont(title_font)
+        header_stack.addWidget(self.title_label)
+
+        self.formula_label = QtWidgets.QLabel("")
+        self.formula_label.setWordWrap(True)
+        header_stack.addWidget(self.formula_label)
+
+        self.iupac_label = QtWidgets.QLabel("")
+        self.iupac_label.setWordWrap(True)
+        header_stack.addWidget(self.iupac_label)
+
+        synonyms_row = QtWidgets.QHBoxLayout()
+        synonyms_row.setContentsMargins(0, 0, 0, 0)
+        self.synonyms_label = QtWidgets.QLabel("")
+        self.synonyms_label.setWordWrap(True)
+        synonyms_row.addWidget(self.synonyms_label, 1)
+        self.synonyms_copy_button = QtWidgets.QPushButton("Copy")
+        self.synonyms_copy_button.setToolTip("Copy all synonyms")
+        self.synonyms_copy_button.clicked.connect(self._copy_synonyms)
+        synonyms_row.addWidget(self.synonyms_copy_button, 0, QtCore.Qt.AlignmentFlag.AlignTop)
+        header_stack.addLayout(synonyms_row)
+
+        header_layout.addLayout(header_stack, 1)
         self.pubchem_button = QtWidgets.QPushButton("Open PubChem")
         self.pubchem_button.clicked.connect(self._open_pubchem)
-        header_layout.addWidget(self.pubchem_button)
+        header_layout.addWidget(self.pubchem_button, 0, QtCore.Qt.AlignmentFlag.AlignTop)
         layout.addLayout(header_layout)
 
-        self.source_label = QtWidgets.QLabel("Source: PubChem")
-        self.source_label.setOpenExternalLinks(True)
-        self.source_label.setText('<a href="https://pubchem.ncbi.nlm.nih.gov/docs/citation-guidelines">Source: PubChem</a>')
-        header_layout.addWidget(self.source_label)
-
+        top_row = QtWidgets.QHBoxLayout()
         self.structure_widget = StructureDiagramWidget(self)
-        layout.addWidget(self.structure_widget)
+        top_row.addWidget(self.structure_widget, 3)
 
         self.bonding_widget = BondingAndPolarityWidget(self)
-        layout.addWidget(self.bonding_widget)
+        top_row.addWidget(self.bonding_widget, 2)
+        layout.addLayout(top_row)
 
         self.oxidation_label = QtWidgets.QLabel("Oxidation states")
         layout.addWidget(self.oxidation_label)
@@ -1397,8 +1568,19 @@ class CompoundPreviewPane(QtWidgets.QWidget):
 
         self.properties_label = QtWidgets.QLabel("Compound properties")
         layout.addWidget(self.properties_label)
-        self.properties_table = CompoundPropertiesTableWidget(self)
-        layout.addWidget(self.properties_table)
+        self.properties_container = QtWidgets.QWidget(self)
+        properties_layout = QtWidgets.QHBoxLayout(self.properties_container)
+        properties_layout.setContentsMargins(0, 0, 0, 0)
+        properties_layout.setSpacing(12)
+        self.properties_left = QtWidgets.QWidget(self.properties_container)
+        self.properties_right = QtWidgets.QWidget(self.properties_container)
+        self.properties_left_layout = QtWidgets.QFormLayout(self.properties_left)
+        self.properties_right_layout = QtWidgets.QFormLayout(self.properties_right)
+        self.properties_left_layout.setLabelAlignment(QtCore.Qt.AlignmentFlag.AlignLeft)
+        self.properties_right_layout.setLabelAlignment(QtCore.Qt.AlignmentFlag.AlignLeft)
+        properties_layout.addWidget(self.properties_left)
+        properties_layout.addWidget(self.properties_right)
+        layout.addWidget(self.properties_container)
 
         self._pubchem_url: str | None = None
 
@@ -1406,21 +1588,38 @@ class CompoundPreviewPane(QtWidgets.QWidget):
         self._theme_tokens = tokens
         colors = tokens["colors"]
         self.setStyleSheet(f"color: {colors['text']};")
+        self.title_label.setStyleSheet(f"color: {colors['text']};")
+        self.formula_label.setStyleSheet(f"color: {colors['textMuted']};")
+        self.iupac_label.setStyleSheet(f"color: {colors['textMuted']};")
+        self.synonyms_label.setStyleSheet(f"color: {colors['textMuted']};")
         self.structure_widget.apply_theme(tokens)
         self.bonding_widget.apply_theme(tokens)
         self.oxidation_table.apply_theme(tokens)
-        self.properties_table.apply_theme(tokens)
+        self._apply_properties_theme(tokens)
 
     def set_compound(self, compound: dict | None) -> None:
         if not compound:
             self._pubchem_url = None
+            self.title_label.setText("Compound")
+            self.formula_label.setText("")
+            self.iupac_label.setText("")
+            self._synonyms_full = []
+            self._update_synonyms_display()
             self.structure_widget.set_cid(None)
             self.bonding_widget.set_bonding("Bonding: —", "Polarity: —")
             self._populate_table(self.oxidation_table, [])
-            self._populate_table(self.properties_table, [])
+            self._clear_form_layout(self.properties_left_layout)
+            self._clear_form_layout(self.properties_right_layout)
             return
-        raw_name = compound.get("name") or ""
-        name = raw_name.split(";")[0].strip()
+        display = compound_db.format_compound_display(compound)
+        primary = display["primary_name"] or "Compound"
+        iupac = display["iupac_name"]
+        formula_display = display["formula_display"]
+        self.title_label.setText(primary)
+        self.formula_label.setText(f"Formula: {formula_display}" if formula_display else "Formula: —")
+        self.iupac_label.setText(f"IUPAC: {iupac}" if iupac else "IUPAC: —")
+        self._synonyms_full = self._clean_synonyms(display["synonyms"])
+        self._update_synonyms_display()
         self._pubchem_url = compound.get("pubchem_url")
         self.structure_widget.set_cid(compound.get("cid"))
         oxidation_states, heuristic = estimate_oxidation_states(compound)
@@ -1436,7 +1635,7 @@ class CompoundPreviewPane(QtWidgets.QWidget):
     def _populate_oxidation_table(self, elements: dict, oxidation_states: dict[str, int | None]) -> None:
         rows = []
         for atomic_number, count in sorted(elements.items()):
-            symbol = ATOMIC_NUMBER_TO_SYMBOL.get(int(atomic_number), str(atomic_number))
+            symbol = get_symbol(int(atomic_number))
             state = oxidation_states.get(symbol)
             rows.append((symbol, str(count), str(state) if state is not None else "Unknown"))
         self._populate_table(self.oxidation_table, rows)
@@ -1445,12 +1644,38 @@ class CompoundPreviewPane(QtWidgets.QWidget):
         rows = []
         if compound.get("mol_weight"):
             rows.append(("Molecular weight", str(compound["mol_weight"])))
-        if compound.get("iupac_name"):
-            iupac = str(compound["iupac_name"]).split(";")[0].strip()
-            rows.append(("IUPAC name", iupac))
         if compound.get("smiles"):
             rows.append(("SMILES", compound["smiles"]))
-        self._populate_table(self.properties_table, rows)
+        midpoint = (len(rows) + 1) // 2
+        self._populate_properties_form(self.properties_left_layout, rows[:midpoint])
+        self._populate_properties_form(self.properties_right_layout, rows[midpoint:])
+        if self._theme_tokens:
+            self._apply_properties_theme(self._theme_tokens)
+
+    def _apply_properties_theme(self, tokens: dict) -> None:
+        colors = tokens["colors"]
+        label_style = f"color: {colors['textMuted']};"
+        value_style = f"color: {colors['text']};"
+        for layout in (self.properties_left_layout, self.properties_right_layout):
+            for row in range(layout.rowCount()):
+                label_item = layout.itemAt(row, QtWidgets.QFormLayout.ItemRole.LabelRole)
+                field_item = layout.itemAt(row, QtWidgets.QFormLayout.ItemRole.FieldRole)
+                if label_item and label_item.widget():
+                    label_item.widget().setStyleSheet(label_style)
+                if field_item and field_item.widget():
+                    field_item.widget().setStyleSheet(value_style)
+
+    def _clear_form_layout(self, layout: QtWidgets.QFormLayout) -> None:
+        while layout.rowCount():
+            layout.removeRow(0)
+
+    def _populate_properties_form(self, layout: QtWidgets.QFormLayout, rows: list[tuple[str, str]]) -> None:
+        self._clear_form_layout(layout)
+        for label_text, value_text in rows:
+            label = QtWidgets.QLabel(label_text)
+            value = QtWidgets.QLabel(value_text)
+            value.setWordWrap(True)
+            layout.addRow(label, value)
 
     def _populate_table(self, table: QtWidgets.QTableWidget, rows: list[tuple[str, str]]) -> None:
         table.setRowCount(0)
@@ -1465,12 +1690,64 @@ class CompoundPreviewPane(QtWidgets.QWidget):
         if self._pubchem_url:
             QtGui.QDesktopServices.openUrl(QtCore.QUrl(self._pubchem_url))
 
+    def _copy_synonyms(self) -> None:
+        if not self._synonyms_full:
+            return
+        QtWidgets.QApplication.clipboard().setText("; ".join(self._synonyms_full))
+
+    def _update_synonyms_display(self) -> None:
+        if not self._synonyms_full:
+            self.synonyms_label.setText("Also known as: —")
+            self.synonyms_copy_button.setEnabled(False)
+            return
+        display, remaining = self._format_synonyms(self._synonyms_full, max_items=6, max_chars=120)
+        suffix = f" (+{remaining} more)" if remaining > 0 else ""
+        self.synonyms_label.setText(f"Also known as: {display}{suffix}")
+        self.synonyms_copy_button.setEnabled(True)
+
+    @staticmethod
+    def _clean_synonyms(values: list[str] | str) -> list[str]:
+        cleaned: list[str] = []
+        seen = set()
+        if isinstance(values, str):
+            values = [item.strip() for item in values.replace("|", ";").split(";") if item.strip()]
+        for value in values:
+            text = str(value).strip()
+            if not text or len(text) > 80:
+                continue
+            lower = text.lower()
+            if "inchikey" in lower or lower.startswith("inchi=") or lower.startswith("inchi"):
+                continue
+            if lower.startswith("cas ") or lower.startswith("cas-"):
+                continue
+            if not any(ch.isalpha() for ch in text):
+                continue
+            digit_ratio = sum(ch.isdigit() for ch in text) / max(len(text), 1)
+            if digit_ratio > 0.6:
+                continue
+            key = lower
+            if key in seen:
+                continue
+            seen.add(key)
+            cleaned.append(text)
+        return cleaned
+
+    @staticmethod
+    def _format_synonyms(values: list[str], max_items: int = 6, max_chars: int = 120) -> tuple[str, int]:
+        display_list = values[:max_items]
+        display = ", ".join(display_list)
+        truncated = len(values) - len(display_list)
+        if len(display) > max_chars:
+            display = display[: max_chars - 1].rstrip() + "…"
+            truncated = max(truncated, 1)
+        return display, truncated
+
 
 def estimate_oxidation_states(compound: dict) -> tuple[dict[str, int | None], bool]:
     elements = compound.get("elements", {})
     symbol_counts = {}
     for atomic_number, count in elements.items():
-        symbol = ATOMIC_NUMBER_TO_SYMBOL.get(int(atomic_number))
+        symbol = get_symbol(int(atomic_number))
         if symbol:
             symbol_counts[symbol] = int(count)
 
@@ -1500,12 +1777,12 @@ def estimate_oxidation_states(compound: dict) -> tuple[dict[str, int | None], bo
 
 def classify_bonding_and_polarity(compound: dict) -> tuple[str, str]:
     elements = compound.get("elements", {})
-    symbols = [ATOMIC_NUMBER_TO_SYMBOL.get(int(z)) for z in elements.keys()]
+    symbols = [get_symbol(int(z)) for z in elements.keys()]
     symbols = [s for s in symbols if s]
     if not symbols:
         return "Bonding: Unknown", "Polarity: Unknown"
-    has_metal = any(is_metal(symbol) for symbol in symbols)
-    has_nonmetal = any(is_nonmetal(symbol) for symbol in symbols)
+    has_metal = any(_is_metal_symbol(symbol) for symbol in symbols)
+    has_nonmetal = any(_is_nonmetal_symbol(symbol) for symbol in symbols)
 
     if has_metal and has_nonmetal:
         bonding = "Bonding: Ionic (heuristic). This compound pairs metal and nonmetal species."
@@ -1514,7 +1791,7 @@ def classify_bonding_and_polarity(compound: dict) -> tuple[str, str]:
     else:
         bonding = "Bonding: Covalent (heuristic). The compound is primarily nonmetals sharing electrons."
 
-    en_values = [electronegativity(symbol) for symbol in symbols if electronegativity(symbol) is not None]
+    en_values = [value for symbol in symbols if (value := _electronegativity_symbol(symbol)) is not None]
     if not en_values:
         return bonding, "Polarity: Unknown"
     max_en = max(en_values)

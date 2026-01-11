@@ -6,8 +6,11 @@ from pathlib import Path
 
 from PySide6 import QtCore
 
+from orbsim.nomenclature import load_phase_names
+
 
 DB_FILENAME = "compounds.sqlite"
+PHASE_TOKENS = {"aq", "g", "l", "s"}
 
 
 def get_db_path() -> Path:
@@ -26,6 +29,111 @@ def connect() -> sqlite3.Connection:
     connection = sqlite3.connect(path)
     connection.row_factory = sqlite3.Row
     return connection
+
+
+def get_compound_count() -> int:
+    if not db_exists():
+        return 0
+    with connect() as connection:
+        try:
+            row = connection.execute("SELECT COUNT(*) AS count FROM compounds").fetchone()
+        except sqlite3.OperationalError:
+            return 0
+    return int(row["count"] if row else 0)
+
+
+def get_last_built() -> str | None:
+    if not db_exists():
+        return None
+    with connect() as connection:
+        try:
+            row = connection.execute(
+                "SELECT value FROM metadata WHERE key = ?",
+                ("last_built",),
+            ).fetchone()
+        except sqlite3.OperationalError:
+            return None
+    return row["value"] if row else None
+
+
+def _extract_phase(text: str | None) -> str | None:
+    if not text:
+        return None
+    lowered = text.lower()
+    for token in PHASE_TOKENS:
+        if f"({token})" in lowered:
+            return token
+    return None
+
+
+def format_formula_display(formula: str, name: str | None = None) -> str:
+    phase = _extract_phase(name)
+    if phase and f"({phase})" not in formula.lower():
+        return f"{formula}({phase})"
+    return formula
+
+
+def merge_phase_names(formula_display: str, primary_name: str, synonyms: list[str]) -> tuple[str, list[str]]:
+    phase_map = load_phase_names()
+    entry = phase_map.get(formula_display)
+    if not entry:
+        related = []
+        for key, value in phase_map.items():
+            if key.startswith(f"{formula_display}("):
+                related.append(value)
+        if not related:
+            return primary_name, synonyms
+        merged = [primary_name] + synonyms
+        for item in related:
+            if item.get("primary_name"):
+                merged.append(item["primary_name"])
+            merged.extend(item.get("synonyms") or [])
+        deduped: list[str] = []
+        seen = set()
+        for item in merged:
+            text = str(item).strip()
+            if not text:
+                continue
+            key = text.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(text)
+        return primary_name, deduped
+    phase_primary = entry.get("primary_name") or primary_name
+    phase_synonyms = entry.get("synonyms") or []
+    merged = [primary_name] + synonyms + [s for s in phase_synonyms if isinstance(s, str)]
+    deduped: list[str] = []
+    seen = set()
+    for item in merged:
+        text = str(item).strip()
+        if not text:
+            continue
+        key = text.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(text)
+    if phase_primary.lower() not in {s.lower() for s in deduped}:
+        deduped.insert(0, phase_primary)
+    return phase_primary, deduped
+
+
+def format_compound_display(compound: dict) -> dict:
+    primary = str(compound.get("title") or compound.get("name") or "Compound").strip()
+    iupac = str(compound.get("iupac_name") or "").strip()
+    formula = str(compound.get("formula") or "").strip()
+    formula_display = format_formula_display(formula, compound.get("name"))
+    synonyms = compound.get("synonyms") or []
+    if isinstance(synonyms, str):
+        synonyms = [s.strip() for s in synonyms.replace("|", ";").split(";") if s.strip()]
+    primary, merged = merge_phase_names(formula_display, primary, list(synonyms))
+    return {
+        "primary_name": primary,
+        "iupac_name": iupac,
+        "formula_display": formula_display,
+        "synonyms": merged,
+    }
 
 
 def query_compounds_by_elements(
@@ -110,6 +218,7 @@ def get_compound_details(cid: int) -> dict | None:
         {
             "cid": row["cid"],
             "name": row["name"],
+            "title": data.get("title") or row["name"],
             "formula": row["formula"],
             "smiles": row["smiles"],
             "inchikey": row["inchikey"],

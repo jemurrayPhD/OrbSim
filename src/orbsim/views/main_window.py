@@ -6,7 +6,7 @@ import qtawesome as qta
 from PySide6 import QtCore, QtGui, QtPrintSupport, QtWidgets
 
 from orbsim.theming.apply_theme import apply_theme as apply_theme_tokens
-from orbsim.theming.theme_tokens import THEME_TOKENS, get_theme_tokens
+from orbsim.theming.theme_manager import apply_skin, get_theme_manager
 from orbsim.ui.generated.ui_main_window import Ui_MainWindow
 from orbsim.tabs.atomic_orbitals_tab import AtomicOrbitalsTab
 from orbsim.tabs.bonding_orbitals_tab import BondingOrbitalsTab
@@ -14,6 +14,8 @@ from orbsim.tabs.compound_builder_tab import CompoundBuilderTab
 from orbsim.tabs.electron_shells_tab import ElectronShellsTab
 from orbsim.tabs.periodic_table_tab import PeriodicTableTab
 from orbsim.views.annotation_editor import AnnotationEditorWindow
+from orbsim.dialogs.compound_database_dialog import CompoundDatabaseDialog
+from orbsim.dialogs.chemical_nomenclature_dialog import ChemicalNomenclatureDialog
 from orbsim.widgets import DropPlotter, PeriodicTableWidget
 
 
@@ -24,6 +26,8 @@ class OrbSimMainWindow(QtWidgets.QMainWindow):
         self.setMinimumSize(1280, 800)
         self._settings = QtCore.QSettings("OrbSim", "OrbSim")
         self._theme_name = self._settings.value("theme", "Fluent Light")
+        self._theme_manager = get_theme_manager()
+        self._theme_manager.theme_changed.connect(self._on_theme_changed)
 
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
@@ -81,7 +85,7 @@ class OrbSimMainWindow(QtWidgets.QMainWindow):
         theme_menu = view_menu.addMenu("Theme")
         theme_group = QtGui.QActionGroup(self)
         theme_group.setExclusive(True)
-        for name in THEME_TOKENS.keys():
+        for name in self._theme_manager.available_themes():
             action = QtGui.QAction(name, self)
             action.setCheckable(True)
             action.setChecked(name == self._theme_name)
@@ -89,13 +93,34 @@ class OrbSimMainWindow(QtWidgets.QMainWindow):
             theme_group.addAction(action)
             theme_menu.addAction(action)
 
+        settings_menu = self.menuBar().addMenu("Settings")
+        compound_action = QtGui.QAction("Compound Database…", self)
+        compound_action.triggered.connect(self._open_compound_db_dialog)
+        settings_menu.addAction(compound_action)
+
+        references_menu = self.menuBar().addMenu("References")
+        nomenclature_action = QtGui.QAction("Chemical Nomenclature", self)
+        nomenclature_action.triggered.connect(self._open_nomenclature_dialog)
+        references_menu.addAction(nomenclature_action)
+
+    def _open_compound_db_dialog(self) -> None:
+        dialog = CompoundDatabaseDialog(self)
+        dialog.exec()
+
+    def _open_nomenclature_dialog(self) -> None:
+        dialog = ChemicalNomenclatureDialog(self)
+        dialog.exec()
+
     def apply_theme(self, theme_name: str) -> None:
         self._theme_name = theme_name
         self._settings.setValue("theme", theme_name)
-        tokens = get_theme_tokens(theme_name)
+        self._theme_manager.set_theme(theme_name)
+
+    def _on_theme_changed(self, tokens: dict) -> None:
         app = QtWidgets.QApplication.instance()
         if app:
             apply_theme_tokens(app, tokens)
+            apply_skin(app, tokens)
         for tab_index in range(self.tabs.count()):
             tab = self.tabs.widget(tab_index)
             apply = getattr(tab, "apply_theme", None)
@@ -201,7 +226,7 @@ class OrbSimMainWindow(QtWidgets.QMainWindow):
         pixmap = self._grab_current_view()
         editor = AnnotationEditorWindow(pixmap, self)
         editor.setAttribute(QtCore.Qt.WidgetAttribute.WA_DeleteOnClose, True)
-        tokens = get_theme_tokens(self._theme_name)
+        tokens = self._theme_manager.tokens()
         editor.apply_theme(tokens)
         editor.show()
         self._annotation_editors.append(editor)

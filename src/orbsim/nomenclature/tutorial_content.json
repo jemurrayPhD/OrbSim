@@ -1,0 +1,30 @@
+{
+  "ionic": {
+    "title": "Ionic Compounds",
+    "body": "<h3>Ionic compounds</h3><p>Name the cation first, then the anion. Main-group metals keep their charge; transition metals use Roman numerals.</p><ul><li>NaCl: sodium chloride</li><li>FeCl2: iron(II) chloride</li></ul>"
+  },
+  "covalent": {
+    "title": "Molecular (Covalent) Compounds",
+    "body": "<h3>Molecular compounds</h3><p>Use prefixes (mono-, di-, tri-, tetra-, etc.). The second element ends with -ide.</p><ul><li>CO: carbon monoxide</li><li>CO2: carbon dioxide</li></ul>"
+  },
+  "acids": {
+    "title": "Acids",
+    "body": "<h3>Acids</h3><p>Aqueous binary acids use hydro- + root + -ic acid. Oxyacids use -ate/-ite to -ic/-ous.</p><ul><li>HCl(aq): hydrochloric acid</li><li>HNO3(aq): nitric acid</li></ul>"
+  },
+  "polyatomic": {
+    "title": "Polyatomic Ions",
+    "body": "<h3>Polyatomic ions</h3><p>Keep the polyatomic ion name. Examples include sulfate (SO4^2-), nitrate (NO3^-), ammonium (NH4^+).</p>"
+  },
+  "hydrates": {
+    "title": "Hydrates",
+    "body": "<h3>Hydrates</h3><p>Name the salt + prefix-hydrate.</p><ul><li>CuSO4·5H2O: copper(II) sulfate pentahydrate</li></ul>"
+  },
+  "roman": {
+    "title": "Roman Numerals",
+    "body": "<h3>Roman numerals</h3><p>For variable-charge metals, indicate the charge in parentheses.</p><ul><li>FeO: iron(II) oxide</li><li>Fe2O3: iron(III) oxide</li></ul>"
+  },
+  "phases": {
+    "title": "Phases",
+    "body": "<h3>Phases</h3><p>Phase labels like (s), (l), (g), (aq) can change names. Example: HCl(aq) is hydrochloric acid, while HCl(g) is hydrogen chloride.</p>"
+  }
+}

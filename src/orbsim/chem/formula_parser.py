@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from collections import defaultdict
 
-from orbsim.chem.elements import SYMBOL_TO_ELEMENT
+from orbsim.chem.elements import get_atomic_number
 
 
 _TOKEN_PATTERN = re.compile(r"[A-Z][a-z]?|\d+|[()]")
@@ -35,7 +35,7 @@ def parse_formula(formula: str) -> dict[str, int]:
         elif token.isdigit():
             raise ValueError(f"Unexpected number token '{token}'.")
         else:
-            if token not in SYMBOL_TO_ELEMENT:
+            if get_atomic_number(token) == 0:
                 raise ValueError(f"Unknown element symbol '{token}'.")
             count = 1
             if index + 1 < len(tokens) and tokens[index + 1].isdigit():
@@ -54,6 +54,8 @@ def expand_formula_to_atomic_numbers(formula: str) -> list[int]:
     counts = parse_formula(formula)
     elements: list[int] = []
     for symbol, count in counts.items():
-        element = SYMBOL_TO_ELEMENT[symbol]
-        elements.extend([element.atomic_number] * count)
+        atomic_number = get_atomic_number(symbol)
+        if atomic_number == 0:
+            continue
+        elements.extend([atomic_number] * count)
     return elements

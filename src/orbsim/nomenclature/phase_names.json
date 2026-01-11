@@ -1,0 +1,50 @@
+{
+  "HCl(aq)": {
+    "primary_name": "Hydrochloric acid",
+    "synonyms": ["Hydrogen chloride (aqueous)"]
+  },
+  "HCl(g)": {
+    "primary_name": "Hydrogen chloride",
+    "synonyms": ["Hydrochloric acid (aqueous)"]
+  },
+  "HF(aq)": {
+    "primary_name": "Hydrofluoric acid",
+    "synonyms": ["Hydrogen fluoride (aqueous)"]
+  },
+  "HF(g)": {
+    "primary_name": "Hydrogen fluoride",
+    "synonyms": ["Hydrofluoric acid (aqueous)"]
+  },
+  "HBr(aq)": {
+    "primary_name": "Hydrobromic acid",
+    "synonyms": ["Hydrogen bromide (aqueous)"]
+  },
+  "HBr(g)": {
+    "primary_name": "Hydrogen bromide",
+    "synonyms": ["Hydrobromic acid (aqueous)"]
+  },
+  "HI(aq)": {
+    "primary_name": "Hydroiodic acid",
+    "synonyms": ["Hydrogen iodide (aqueous)"]
+  },
+  "HI(g)": {
+    "primary_name": "Hydrogen iodide",
+    "synonyms": ["Hydroiodic acid (aqueous)"]
+  },
+  "H2S(aq)": {
+    "primary_name": "Hydrosulfuric acid",
+    "synonyms": ["Hydrogen sulfide (aqueous)"]
+  },
+  "H2S(g)": {
+    "primary_name": "Hydrogen sulfide",
+    "synonyms": ["Hydrosulfuric acid (aqueous)"]
+  },
+  "NH3(aq)": {
+    "primary_name": "Ammonium hydroxide",
+    "synonyms": ["Ammonia solution", "Aqueous ammonia"]
+  },
+  "NH3(g)": {
+    "primary_name": "Ammonia",
+    "synonyms": ["Ammonium hydroxide (aqueous)"]
+  }
+}

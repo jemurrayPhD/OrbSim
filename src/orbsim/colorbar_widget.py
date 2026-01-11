@@ -4,6 +4,8 @@ from dataclasses import dataclass
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
+from orbsim.tabs.shared import resolve_cmap
+
 
 @dataclass
 class ColorbarData:
@@ -49,19 +51,13 @@ class HorizontalColorbarWidget(QtWidgets.QWidget):
         self.update()
 
     def _build_gradient(self, width: int, height: int) -> QtGui.QImage:
-        try:
-            from matplotlib import cm
-        except Exception:
-            image = QtGui.QImage(width, height, QtGui.QImage.Format.Format_RGB32)
-            image.fill(QtGui.QColor(self._colors["surface"]))
-            return image
         data = self._data
         if not data:
             image = QtGui.QImage(width, height, QtGui.QImage.Format.Format_RGB32)
             image.fill(QtGui.QColor(self._colors["surface"]))
             return image
         gradient = QtGui.QImage(width, height, QtGui.QImage.Format.Format_RGB32)
-        cmap = cm.get_cmap(data.cmap_name)
+        cmap = resolve_cmap(data.cmap_name)
         for x in range(width):
             frac = x / max(width - 1, 1)
             rgba = cmap(frac)
@@ -76,43 +72,44 @@ class HorizontalColorbarWidget(QtWidgets.QWidget):
 
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:
         painter = QtGui.QPainter(self)
-        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
-        rect = self.rect()
-        painter.fillRect(rect, QtGui.QColor(self._colors["surface"]))
-        if not self._data:
+        try:
+            painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
+            rect = self.rect()
+            painter.fillRect(rect, QtGui.QColor(self._colors["surface"]))
+            if not self._data:
+                return
+            padding = 8
+            label_height = 16
+            bar_height = 12
+            bar_rect = QtCore.QRect(
+                rect.left() + padding,
+                rect.top() + padding + label_height,
+                rect.width() - padding * 2,
+                bar_height,
+            )
+            if self._gradient_cache is None or self._gradient_cache.width() != bar_rect.width():
+                self._gradient_cache = self._build_gradient(bar_rect.width(), bar_rect.height())
+            painter.drawImage(bar_rect, self._gradient_cache)
+            painter.setPen(QtGui.QPen(QtGui.QColor(self._colors["border"])))
+            painter.drawRect(bar_rect.adjusted(0, 0, -1, -1))
+            painter.setPen(QtGui.QPen(QtGui.QColor(self._colors["text"])))
+            painter.setFont(self.font())
+            label_text = self._data.label
+            painter.drawText(
+                rect.left() + padding,
+                rect.top() + padding + 12,
+                label_text,
+            )
+            vmin = self._data.vmin
+            vmax = self._data.vmax
+            text = painter.fontMetrics()
+            min_text = f"{vmin:.3g}"
+            max_text = f"{vmax:.3g}"
+            painter.drawText(bar_rect.left(), bar_rect.bottom() + text.height() + 2, min_text)
+            painter.drawText(
+                bar_rect.right() - text.horizontalAdvance(max_text),
+                bar_rect.bottom() + text.height() + 2,
+                max_text,
+            )
+        finally:
             painter.end()
-            return
-        padding = 8
-        label_height = 16
-        bar_height = 12
-        bar_rect = QtCore.QRect(
-            rect.left() + padding,
-            rect.top() + padding + label_height,
-            rect.width() - padding * 2,
-            bar_height,
-        )
-        if self._gradient_cache is None or self._gradient_cache.width() != bar_rect.width():
-            self._gradient_cache = self._build_gradient(bar_rect.width(), bar_rect.height())
-        painter.drawImage(bar_rect, self._gradient_cache)
-        painter.setPen(QtGui.QPen(QtGui.QColor(self._colors["border"])))
-        painter.drawRect(bar_rect.adjusted(0, 0, -1, -1))
-        painter.setPen(QtGui.QPen(QtGui.QColor(self._colors["text"])))
-        painter.setFont(self.font())
-        label_text = self._data.label
-        painter.drawText(
-            rect.left() + padding,
-            rect.top() + padding + 12,
-            label_text,
-        )
-        vmin = self._data.vmin
-        vmax = self._data.vmax
-        text = painter.fontMetrics()
-        min_text = f"{vmin:.3g}"
-        max_text = f"{vmax:.3g}"
-        painter.drawText(bar_rect.left(), bar_rect.bottom() + text.height() + 2, min_text)
-        painter.drawText(
-            bar_rect.right() - text.horizontalAdvance(max_text),
-            bar_rect.bottom() + text.height() + 2,
-            max_text,
-        )
-        painter.end()

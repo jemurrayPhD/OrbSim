@@ -4,6 +4,7 @@ import sys
 
 from PySide6 import QtWidgets
 
+from orbsim import resources  # noqa: F401
 from orbsim.views.main_window import OrbSimMainWindow
 
 

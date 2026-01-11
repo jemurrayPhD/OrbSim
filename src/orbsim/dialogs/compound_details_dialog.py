@@ -4,13 +4,41 @@ from pathlib import Path
 
 from PySide6 import QtCore, QtGui, QtNetwork, QtWidgets
 
-from orbsim.chem.elements import ATOMIC_NUMBER_TO_SYMBOL, electronegativity, is_metal, is_nonmetal
+from orbsim.chem.elements import get_atomic_number, get_element, get_symbol
+from orbsim.chem import compound_db
+
+
+def _element_family(symbol: str) -> str:
+    atomic_number = get_atomic_number(symbol)
+    if atomic_number <= 0:
+        return ""
+    element = get_element(atomic_number)
+    return str(element.get("family") or element.get("category") or element.get("categoryName") or "")
+
+
+def _is_metal_symbol(symbol: str) -> bool:
+    family = _element_family(symbol).lower()
+    return "metal" in family and "nonmetal" not in family and "metalloid" not in family
+
+
+def _is_nonmetal_symbol(symbol: str) -> bool:
+    family = _element_family(symbol).lower()
+    return "nonmetal" in family or "non-metal" in family
+
+
+def _electronegativity_symbol(symbol: str) -> float | None:
+    atomic_number = get_atomic_number(symbol)
+    if atomic_number <= 0:
+        return None
+    element = get_element(atomic_number)
+    value = element.get("electronegativity")
+    try:
+        return None if value in (None, "", "-") else float(value)
+    except Exception:
+        return None
 
 
 PUBCHEM_IMAGE_URL = "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/{cid}/PNG"
-PUBCHEM_CITATION_URL = "https://pubchem.ncbi.nlm.nih.gov/docs/citation-guidelines"
-
-
 class CompoundDetailsDialog(QtWidgets.QDialog):
     def __init__(self, compound: dict, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
@@ -63,17 +91,15 @@ class CompoundDetailsDialog(QtWidgets.QDialog):
         self.properties_label.setWordWrap(True)
         layout.addWidget(self.properties_label)
 
-        self.source_label = QtWidgets.QLabel("")
-        self.source_label.setOpenExternalLinks(True)
-        self.source_label.setWordWrap(True)
-        layout.addWidget(self.source_label)
-
         close_btn = QtWidgets.QPushButton("Close")
         close_btn.clicked.connect(self.accept)
         layout.addWidget(close_btn, 0, QtCore.Qt.AlignmentFlag.AlignRight)
 
     def _populate(self) -> None:
-        self.title_label.setText(f"{self.compound['name']} ({self.compound['formula']})")
+        display = compound_db.format_compound_display(self.compound)
+        title = display["primary_name"] or "Compound"
+        formula_display = display["formula_display"] or self.compound.get("formula") or ""
+        self.title_label.setText(f"{title} ({formula_display})")
 
         oxidation_states, heuristic = estimate_oxidation_states(self.compound)
         if heuristic:
@@ -85,26 +111,21 @@ class CompoundDetailsDialog(QtWidgets.QDialog):
         bonding_text, polarity_text = classify_bonding_and_polarity(self.compound)
         self.bonding_label.setText(f"Bonding: {bonding_text}. Polarity: {polarity_text}.")
 
-        properties = [
-            ("Molecular weight", self.compound.get("mol_weight")),
-            ("IUPAC name", self.compound.get("iupac_name")),
-        ]
-        synonyms = self.compound.get("synonyms") or []
-        if isinstance(synonyms, list) and synonyms:
-            properties.append(("Synonyms", ", ".join(synonyms[:5])))
+        properties = [("Molecular weight", self.compound.get("mol_weight"))]
+        if display["iupac_name"]:
+            properties.append(("IUPAC", display["iupac_name"]))
+        synonyms = self._clean_synonyms(display["synonyms"])
+        if synonyms:
+            properties.append(("Also known as", ", ".join(synonyms[:6])))
         prop_lines = [f"{label}: {value}" for label, value in properties if value]
         self.properties_label.setText("Known data: " + ("; ".join(prop_lines) if prop_lines else "Unavailable"))
-
-        self.source_label.setText(
-            "Data source: PubChem (NIH/NLM). "
-            f"<a href=\"{PUBCHEM_CITATION_URL}\">Citation guidelines</a>."
-        )
+        self.properties_label.setToolTip("Data source: PubChem (NIH/NLM).")
 
     def _populate_oxidation_table(self, oxidation_states: dict[str, int | None]) -> None:
         elements = self.compound.get("elements", {})
         self.oxidation_table.setRowCount(0)
         for row_index, (atomic_number, count) in enumerate(sorted(elements.items())):
-            symbol = ATOMIC_NUMBER_TO_SYMBOL.get(int(atomic_number), str(atomic_number))
+            symbol = get_symbol(int(atomic_number))
             state = oxidation_states.get(symbol)
             state_text = str(state) if state is not None else "Unknown"
             self.oxidation_table.insertRow(row_index)
@@ -155,12 +176,36 @@ class CompoundDetailsDialog(QtWidgets.QDialog):
             self.image_label.setText("2D structure depiction unavailable.")
         reply.deleteLater()
 
+    @staticmethod
+    def _clean_synonyms(values: list[str]) -> list[str]:
+        cleaned: list[str] = []
+        seen = set()
+        for value in values:
+            text = str(value).strip()
+            if not text or len(text) > 80:
+                continue
+            lower = text.lower()
+            if "inchikey" in lower or lower.startswith("inchi=") or lower.startswith("inchi"):
+                continue
+            if lower.startswith("cas ") or lower.startswith("cas-"):
+                continue
+            if not any(ch.isalpha() for ch in text):
+                continue
+            digit_ratio = sum(ch.isdigit() for ch in text) / max(len(text), 1)
+            if digit_ratio > 0.6:
+                continue
+            if lower in seen:
+                continue
+            seen.add(lower)
+            cleaned.append(text)
+        return cleaned
+
 
 def estimate_oxidation_states(compound: dict) -> tuple[dict[str, int | None], bool]:
     elements = compound.get("elements", {})
     symbol_counts = {}
     for atomic_number, count in elements.items():
-        symbol = ATOMIC_NUMBER_TO_SYMBOL.get(int(atomic_number))
+        symbol = get_symbol(int(atomic_number))
         if symbol:
             symbol_counts[symbol] = int(count)
 
@@ -190,12 +235,12 @@ def estimate_oxidation_states(compound: dict) -> tuple[dict[str, int | None], bo
 
 def classify_bonding_and_polarity(compound: dict) -> tuple[str, str]:
     elements = compound.get("elements", {})
-    symbols = [ATOMIC_NUMBER_TO_SYMBOL.get(int(z)) for z in elements.keys()]
+    symbols = [get_symbol(int(z)) for z in elements.keys()]
     symbols = [s for s in symbols if s]
     if not symbols:
         return "Unknown", "Unknown"
-    has_metal = any(is_metal(symbol) for symbol in symbols)
-    has_nonmetal = any(is_nonmetal(symbol) for symbol in symbols)
+    has_metal = any(_is_metal_symbol(symbol) for symbol in symbols)
+    has_nonmetal = any(_is_nonmetal_symbol(symbol) for symbol in symbols)
 
     if has_metal and has_nonmetal:
         bonding = "Ionic (heuristic)"
@@ -204,7 +249,7 @@ def classify_bonding_and_polarity(compound: dict) -> tuple[str, str]:
     else:
         bonding = "Covalent (heuristic)"
 
-    en_values = [electronegativity(symbol) for symbol in symbols if electronegativity(symbol) is not None]
+    en_values = [value for symbol in symbols if (value := _electronegativity_symbol(symbol)) is not None]
     if not en_values:
         polarity = "Unknown"
     else:

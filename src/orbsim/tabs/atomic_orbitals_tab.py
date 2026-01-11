@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import logging
 import math
 import os
 import shutil
@@ -28,6 +29,7 @@ from orbsim.orbitals import (
 )
 from orbsim.tabs.shared import resolve_cmap
 from orbsim.ui.generated.ui_atomic_orbitals import Ui_AtomicOrbitalsTab
+from orbsim.views.clipping_controller import ClippingController
 from orbsim.widgets import DropPlotter
 
 ureg = UnitRegistry()
@@ -251,15 +253,21 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         self.current_m = 0
         self.current_mode = "amplitude"
         self.current_cmap = "viridis"
-        self.current_representation = "surface"
+        self.current_representation = "volume"
         self.camera_initialized = False
         self.iso_fraction = 0.85
         self.iso_surfaces_count = 5
         self.slice_contours_count = 10
+        self.slice_plane_resolution = 20
         self.show_occupied = False
         self._field_cache: OrderedDict[tuple, object] = OrderedDict()
         self.slice_normal = np.array([0.0, 0.0, 1.0])
         self.slice_offset = 0.0
+        self.slice_origin: np.ndarray | None = None
+        self.clip_mode: str = "none"
+        self.clip_plane_normal: np.ndarray | None = None
+        self.clip_plane_origin: np.ndarray | None = None
+        self.clip_box_bounds: tuple[float, float, float, float, float, float] | None = None
         self.slice_plane_actor = None
         self.offset_spin: QtWidgets.QDoubleSpinBox | None = None
         self.offset_slider: QtWidgets.QSlider | None = None
@@ -270,6 +278,7 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         self._theme_tokens: dict | None = None
         self._text_color = "#ffffff"
         self._text_shadow = True
+        self._text_backdrop_opacity = 0.4
         self._slice_plane_color = "#cbd5e1"
         self._slice_plane_edge_color = "#94a3b8"
         self.plotter_frame = self.ui.plotterFrame
@@ -278,10 +287,18 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
             self.plotter_frame.colorbar.setFixedWidth(0)
         except Exception:
             pass
+        self._wrap_viewport_frame(self.plotter_frame)
         self.plotter = self.plotter_frame.plotter
+        try:
+            self.plotter.enable_depth_peeling()
+        except Exception:
+            pass
+        self.clipping_controller = ClippingController(self.plotter)
+        self.clipping_controller.clip_changed.connect(self._on_clip_widget_changed)
         try:
             self.plotter.enable_anti_aliasing()
             self.plotter.enable_eye_dome_lighting()
+            self.plotter.enable_depth_peeling()
         except Exception:
             pass
         self._setup_lights()
@@ -293,6 +310,7 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         except Exception:
             pass
         self.slice_container = self.ui.sliceContainer
+        self._wrap_viewport_frame(self.slice_container)
         slice_layout = QtWidgets.QVBoxLayout(self.slice_container)
         slice_layout.setContentsMargins(0, 0, 0, 0)
         slice_layout.addWidget(self.slice_view)
@@ -318,20 +336,25 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         self._scale_bar_margin = (24, 24)
         self._last_slice_bounds: tuple[float, float, float, float, float, float] | None = None
 
+        self.opacity_scale = 1.0
+        self.opacity_low = 0.05
+        self.opacity_high = 1.0
+        self.volume_renderer_mode = "auto"
+        self._auto_volume_fallback_attempted = False
+        self._volume_status_timer: QtCore.QTimer | None = None
+        self._volume_bounds: tuple[float, float, float, float, float, float] | None = None
+        self.clip_invert = False
         self.controls = self._build_controls()
         self._set_slice_normal(self.slice_normal, update_controls=True, trigger_render=False)
         self.slice_offset = 0.0
         self.offset_spin.setValue(self.slice_offset)
-        self.slice_cmap = self.current_cmap
         self.slice_vmin = None
         self.slice_vmax = None
         self.slice_scalar_mode = "probability"
-        self.iso_opacity_overrides: list[float] = []
         # preferences
         self.pref_show_grid = True
         self.pref_show_slice_plane = True
         self.pref_slice_plane_opacity = 0.35
-        self._update_visibility_controls()
 
         self.controls_scroll = self.ui.controlsScroll
         self.controls_scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
@@ -349,6 +372,7 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         mode = tokens.get("meta", {}).get("mode", "light")
         self._text_color = colors["text"]
         self._text_shadow = mode in ("dark", "high_contrast")
+        self._text_backdrop_opacity = 0.6 if mode == "light" else 0.4
         self._slice_plane_color = colors["surfaceAlt"]
         self._slice_plane_edge_color = colors["surfaceAlt"] if mode == "high_contrast" else colors["border"]
         self.plotter_frame.apply_theme(tokens)
@@ -369,6 +393,79 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         )
         self._update_slice_scalebar()
 
+    def _apply_text_backdrop(self, actor) -> None:
+        try:
+            prop = actor.GetTextProperty()
+            if prop:
+                background = QtGui.QColor(self._text_color)
+                if self._theme_tokens and self._theme_tokens.get("colors"):
+                    background = QtGui.QColor(self._theme_tokens["colors"].get("surfaceAlt", "#0f172a"))
+                prop.SetBackgroundColor(background.redF(), background.greenF(), background.blueF())
+                prop.SetBackgroundOpacity(self._text_backdrop_opacity)
+        except Exception:
+            pass
+
+    def _prepare_volume_scalars(self, dataset, prob_arr: np.ndarray) -> np.ndarray:
+        logger = logging.getLogger(__name__)
+        prob_arr = np.asarray(prob_arr)
+        if prob_arr.size == 0:
+            return np.array([], dtype=np.float32)
+        nan_count = int(np.isnan(prob_arr).sum())
+        prob_raw = np.nan_to_num(prob_arr, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)
+        p1 = float(np.percentile(prob_raw, 1.0))
+        p50 = float(np.percentile(prob_raw, 50.0))
+        p99 = float(np.percentile(prob_raw, 99.0))
+        if p99 <= p1:
+            p99 = p1 + 1e-6
+        prob_clip = np.clip(prob_raw, p1, p99)
+        prob_scaled = (prob_clip - p1) / max(p99 - p1, 1e-12)
+        prob_scaled = np.clip(prob_scaled, 0.0, 1.0).astype(np.float32)
+        dataset["density_raw"] = prob_raw
+        dataset["density_render"] = prob_scaled
+        try:
+            dataset.set_active_scalars("density_render")
+        except Exception:
+            try:
+                dataset.active_scalars_name = "density_render"
+            except Exception:
+                pass
+        try:
+            point_data = dataset.GetPointData()
+            if point_data:
+                scalars = point_data.GetArray("density_render")
+                if scalars:
+                    point_data.SetScalars(scalars)
+        except Exception:
+            pass
+        logger.debug(
+            "Volume scalars: raw dtype=%s range=(%.4g, %.4g) p1/p50/p99=(%.4g, %.4g, %.4g) nan=%d "
+            "render dtype=%s range=(%.4g, %.4g)",
+            prob_raw.dtype,
+            float(np.min(prob_raw)),
+            float(np.max(prob_raw)),
+            p1,
+            p50,
+            p99,
+            nan_count,
+            prob_scaled.dtype,
+            float(np.min(prob_scaled)),
+            float(np.max(prob_scaled)),
+        )
+        return prob_scaled
+
+    def _log_volume_bounds(self) -> None:
+        if not self._volume_bounds:
+            return
+        logger = logging.getLogger(__name__)
+        bounds = self._volume_bounds
+        logger.debug("Volume bounds: %s", bounds)
+        try:
+            ranges = (bounds[1] - bounds[0], bounds[3] - bounds[2], bounds[5] - bounds[4])
+            if any(r <= 0 for r in ranges):
+                logger.warning("Volume bounds appear degenerate: %s", bounds)
+        except Exception:
+            pass
+
     def _get_cmap(self, name: str):
         return resolve_cmap(name)
 
@@ -382,18 +479,9 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         three_d_group = QtWidgets.QGroupBox("3D View")
         three_d_layout = QtWidgets.QFormLayout(three_d_group)
 
-        self.symbol_combo = QtWidgets.QComboBox()
-        for sym in sorted(_ATOMIC_NUMBER.keys(), key=lambda s: _ATOMIC_NUMBER[s]):
-            self.symbol_combo.addItem(sym)
-        self.symbol_combo.setCurrentText(self.current_symbol)
-        self.symbol_combo.currentTextChanged.connect(self._update_symbol)
-        three_d_layout.addRow("Element", self.symbol_combo)
-
-        self.representation_combo = QtWidgets.QComboBox()
-        self.representation_combo.addItem("Surface (iso-probability)", "surface")
-        self.representation_combo.addItem("Volume (semi-transparent)", "volume")
-        self.representation_combo.currentIndexChanged.connect(self._set_representation)
-        three_d_layout.addRow("Type", self.representation_combo)
+        rendering_label = QtWidgets.QLabel("Volume")
+        rendering_label.setEnabled(False)
+        three_d_layout.addRow("3D Rendering", rendering_label)
 
         self.mode_combo = QtWidgets.QComboBox()
         self.mode_combo.addItems(["amplitude", "wavefunction"])
@@ -407,19 +495,36 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         self.cmap_combo.currentTextChanged.connect(self._set_cmap)
         three_d_layout.addRow("Colormap", self.cmap_combo)
 
-        self.iso_slider_label = QtWidgets.QLabel("Contained probability (%)")
-        self.iso_slider = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
-        self.iso_slider.setRange(5, 99)
-        self.iso_slider.setValue(int(self.iso_fraction * 100))
-        self.iso_slider.valueChanged.connect(self._set_iso_fraction)
-        three_d_layout.addRow(self.iso_slider_label, self.iso_slider)
+        self.opacity_scale_slider = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
+        self.opacity_scale_slider.setRange(0, 200)
+        self.opacity_scale_slider.setValue(int(self.opacity_scale * 100))
+        self.opacity_scale_slider.valueChanged.connect(self._set_opacity_scale)
+        three_d_layout.addRow("Opacity scale", self.opacity_scale_slider)
 
-        self.iso_spin_label = QtWidgets.QLabel("Iso surfaces (3D)")
-        self.iso_surface_spin = QtWidgets.QSpinBox()
-        self.iso_surface_spin.setRange(2, 12)
-        self.iso_surface_spin.setValue(self.iso_surfaces_count)
-        self.iso_surface_spin.valueChanged.connect(self._set_iso_surfaces_count)
-        three_d_layout.addRow(self.iso_spin_label, self.iso_surface_spin)
+        self.opacity_low_slider = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
+        self.opacity_low_slider.setRange(0, 95)
+        self.opacity_low_slider.setValue(int(self.opacity_low * 100))
+        self.opacity_low_slider.valueChanged.connect(self._set_opacity_low)
+        three_d_layout.addRow("Low cutoff (%)", self.opacity_low_slider)
+
+        self.opacity_high_slider = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
+        self.opacity_high_slider.setRange(5, 100)
+        self.opacity_high_slider.setValue(int(self.opacity_high * 100))
+        self.opacity_high_slider.valueChanged.connect(self._set_opacity_high)
+        three_d_layout.addRow("High cutoff (%)", self.opacity_high_slider)
+
+        self.volume_renderer_combo = QtWidgets.QComboBox()
+        self.volume_renderer_combo.addItem("Auto", "auto")
+        self.volume_renderer_combo.addItem("GPU (OpenGL)", "gpu")
+        self.volume_renderer_combo.addItem("CPU (compatibility)", "cpu")
+        self.volume_renderer_combo.setCurrentIndex(0)
+        self.volume_renderer_combo.currentIndexChanged.connect(self._set_volume_renderer_mode)
+        three_d_layout.addRow("Volume renderer", self.volume_renderer_combo)
+
+        self.volume_status_label = QtWidgets.QLabel("")
+        self.volume_status_label.setWordWrap(True)
+        self.volume_status_label.setVisible(False)
+        three_d_layout.addRow(self.volume_status_label)
 
         self.volume_tf_btn = QtWidgets.QPushButton("Edit transfer function (3D)")
         self.volume_tf_btn.clicked.connect(self._open_volume_tf_dialog)
@@ -432,6 +537,22 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         prefs_btn = QtWidgets.QPushButton("Preferences")
         prefs_btn.clicked.connect(self._open_preferences)
         three_d_layout.addRow(prefs_btn)
+
+        clip_group = QtWidgets.QGroupBox("Clipping")
+        clip_layout = QtWidgets.QFormLayout(clip_group)
+        self.clip_mode_combo = QtWidgets.QComboBox()
+        self.clip_mode_combo.addItem("None", "none")
+        self.clip_mode_combo.addItem("Plane clip", "plane")
+        self.clip_mode_combo.addItem("Box clip", "box")
+        self.clip_mode_combo.currentIndexChanged.connect(self._on_clip_mode_change)
+        clip_layout.addRow("Mode", self.clip_mode_combo)
+        self.clip_invert_check = QtWidgets.QCheckBox("Invert clip")
+        self.clip_invert_check.stateChanged.connect(self._toggle_clip_invert)
+        self.clip_invert_check.setEnabled(False)
+        clip_layout.addRow(self.clip_invert_check)
+        reset_clip_btn = QtWidgets.QPushButton("Reset clip")
+        reset_clip_btn.clicked.connect(self._reset_clipping)
+        clip_layout.addRow(reset_clip_btn)
 
         quantum_group = QtWidgets.QGroupBox("Quantum numbers")
         quantum_layout = QtWidgets.QFormLayout(quantum_group)
@@ -454,6 +575,7 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         quantum_layout.addRow("m (magnetic)", self.m_spin)
 
         layout.addWidget(three_d_group)
+        layout.addWidget(clip_group)
         layout.addWidget(quantum_group)
 
         # 2D controls (non-collapsible)
@@ -514,20 +636,12 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         two_d_layout.addRow(self.offset_slider)
 
         self.slice_scalar_combo = QtWidgets.QComboBox()
-        self.slice_scalar_combo.addItem("Probability density", "probability")
+        self.slice_scalar_combo.addItem("Electron Density", "probability")
         self.slice_scalar_combo.addItem("Cumulative probability", "cumulative")
         self.slice_scalar_combo.addItem("Probability amplitude", "amplitude")
         self.slice_scalar_combo.addItem("Phase (cyclic)", "phase")
         self.slice_scalar_combo.currentIndexChanged.connect(self._set_slice_scalar_mode)
         two_d_layout.addRow("Slice scalars", self.slice_scalar_combo)
-
-        self.slice_cmap_combo = QtWidgets.QComboBox()
-        self.slice_cmap_combo.addItems(
-            ["viridis", "plasma", "inferno", "twilight", "coolwarm", "twilight_shifted", "magma", "cividis", "batlow", "bamako", "devon", "oslo", "lajolla", "hawaii", "davos", "vik", "broc", "cork", "roma", "tokyo"]
-        )
-        self.slice_cmap_combo.setCurrentText(self.current_cmap)
-        self.slice_cmap_combo.currentTextChanged.connect(self._set_slice_cmap)
-        two_d_layout.addRow("Colormap (2D)", self.slice_cmap_combo)
 
         self.slice_vmin_spin = QtWidgets.QDoubleSpinBox()
         self.slice_vmin_spin.setDecimals(4)
@@ -565,29 +679,8 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
 
         layout.addWidget(two_d_group)
 
-        measurement_group = QtWidgets.QGroupBox("Measurements")
-        measure_layout = QtWidgets.QVBoxLayout(measurement_group)
-        self.distance_btn = QtWidgets.QPushButton("Measure distance")
-        self.distance_btn.clicked.connect(self._start_distance_measurement)
-        self.angle_btn = QtWidgets.QPushButton("Measure angle")
-        self.angle_btn.clicked.connect(self._start_angle_measurement)
-        self.clear_measure_btn = QtWidgets.QPushButton("Clear measurements")
-        self.clear_measure_btn.clicked.connect(self._clear_measurements)
-        measure_layout.addWidget(self.distance_btn)
-        measure_layout.addWidget(self.angle_btn)
-        measure_layout.addWidget(self.clear_measure_btn)
-        layout.addWidget(measurement_group)
         layout.addStretch()
         return container
-
-    def _update_symbol_from_element(self, element) -> None:
-        self._update_symbol(element.symbol)
-
-    def _update_symbol(self, symbol: str) -> None:
-        self.current_symbol = symbol
-        default_n, default_l = default_quantum_numbers(symbol)
-        self._set_quantum_numbers(default_n, default_l, 0, trigger_render=False)
-        self._render_orbital()
 
     def _set_quantum_numbers(self, n: int, l: int, m: int, trigger_render: bool = True) -> None:
         n_val = max(int(n), 1)
@@ -624,32 +717,74 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
             self.cmap_combo.setCurrentText("twilight")
         self._render_orbital()
 
+    def _on_clip_mode_change(self) -> None:
+        mode = self.clip_mode_combo.currentData() if hasattr(self, "clip_mode_combo") else "none"
+        if hasattr(self, "clip_invert_check"):
+            self.clip_invert_check.setEnabled(mode == "plane")
+        if self.clipping_controller:
+            self.clipping_controller.set_mode(mode)
+
+    def _reset_clipping(self) -> None:
+        if self.clipping_controller:
+            self.clipping_controller.reset()
+
     def _set_cmap(self, cmap: str) -> None:
         self.current_cmap = cmap
         self._render_orbital()
 
-    def _set_iso_fraction(self, value: int) -> None:
-        self.iso_fraction = value / 100.0
+    def _set_opacity_scale(self, value: int) -> None:
+        self.opacity_scale = value / 100.0
         self._render_orbital()
 
-    def _set_representation(self, index: int | None = None) -> None:
-        self.current_representation = self.representation_combo.currentData()
-        self._update_visibility_controls()
+    def _set_opacity_low(self, value: int) -> None:
+        self.opacity_low = value / 100.0
+        if self.opacity_low >= self.opacity_high:
+            self.opacity_low = max(0.0, self.opacity_high - 0.05)
+            self.opacity_low_slider.setValue(int(self.opacity_low * 100))
         self._render_orbital()
 
-    def _set_iso_surfaces_count(self, value: int) -> None:
-        self.iso_surfaces_count = max(2, int(value))
-        if self.iso_opacity_overrides:
-            self.iso_opacity_overrides = self.iso_opacity_overrides[: self.iso_surfaces_count]
+    def _set_opacity_high(self, value: int) -> None:
+        self.opacity_high = value / 100.0
+        if self.opacity_high <= self.opacity_low:
+            self.opacity_high = min(1.0, self.opacity_low + 0.05)
+            self.opacity_high_slider.setValue(int(self.opacity_high * 100))
+        self._render_orbital()
+
+    def _set_volume_renderer_mode(self) -> None:
+        data = self.volume_renderer_combo.currentData()
+        if data:
+            self.volume_renderer_mode = str(data)
+        self._auto_volume_fallback_attempted = False
         self._render_orbital()
 
     def _set_contour_count(self, value: int) -> None:
         self.slice_contours_count = max(2, int(value))
         self._render_orbital()
 
-    def _set_slice_cmap(self, cmap: str) -> None:
-        self.slice_cmap = cmap
-        self._render_orbital()
+    def _show_volume_status(self, message: str, timeout_ms: int = 3500) -> None:
+        if not getattr(self, "volume_status_label", None):
+            return
+        self.volume_status_label.setText(message)
+        self.volume_status_label.setVisible(True)
+        if self._volume_status_timer is None:
+            self._volume_status_timer = QtCore.QTimer(self)
+            self._volume_status_timer.setSingleShot(True)
+            self._volume_status_timer.timeout.connect(lambda: self.volume_status_label.setVisible(False))
+        self._volume_status_timer.start(timeout_ms)
+
+    def _volume_render_seems_blank(self) -> bool:
+        try:
+            frame = self.plotter.screenshot(return_img=True)
+            if frame is None:
+                return False
+            arr = np.asarray(frame)
+            if arr.size == 0:
+                return False
+            if arr.ndim >= 3:
+                arr = arr[..., :3]
+            return float(np.std(arr)) < 1.0
+        except Exception:
+            return False
 
     def _set_slice_vmin(self, value: float) -> None:
         self.slice_vmin = None if value == 0 and self.slice_vmin_spin.specialValueText() else value
@@ -671,57 +806,44 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         self.slice_scalar_mode = self.slice_scalar_combo.currentData()
         self._render_orbital()
 
-    def _update_visibility_controls(self) -> None:
-        is_volume = self.current_representation == "volume"
-        for widget in (
-            getattr(self, "iso_slider_label", None),
-            getattr(self, "iso_slider", None),
-            getattr(self, "iso_spin_label", None),
-            getattr(self, "iso_surface_spin", None),
-            getattr(self, "volume_tf_btn", None),
-        ):
-            if widget:
-                widget.setVisible(is_volume)
+    def _on_clip_widget_changed(self, payload: dict) -> None:
+        mode = payload.get("mode", "none")
+        self.clip_mode = mode
+        plane = payload.get("plane", {}) if isinstance(payload.get("plane"), dict) else {}
+        box = payload.get("box", {}) if isinstance(payload.get("box"), dict) else {}
+        if mode == "plane":
+            origin = plane.get("origin")
+            normal = plane.get("normal")
+            if origin is not None and normal is not None:
+                try:
+                    self.clip_plane_origin = np.array(origin, dtype=float)
+                    self.clip_plane_normal = np.array(normal, dtype=float)
+                    self.slice_origin = np.array(origin, dtype=float)
+                    self.slice_normal = np.array(normal, dtype=float)
+                    self._sync_slice_controls()
+                except Exception:
+                    pass
+        elif mode == "box":
+            bounds = box.get("bounds")
+            if bounds is not None:
+                self.clip_box_bounds = tuple(bounds)
+        else:
+            self.clip_plane_origin = None
+            self.clip_plane_normal = None
+            self.clip_box_bounds = None
+        self._render_orbital()
+
+    def _toggle_clip_invert(self) -> None:
+        self.clip_invert = bool(self.clip_invert_check.isChecked())
+        self._render_orbital()
 
     def _open_volume_tf_dialog(self) -> None:
-        dialog = QtWidgets.QDialog(self)
-        dialog.setWindowTitle("3D Transfer Function")
-        layout = QtWidgets.QFormLayout(dialog)
-        cmap_combo = QtWidgets.QComboBox(dialog)
-        cmap_options = [self.cmap_combo.itemText(i) for i in range(self.cmap_combo.count())]
-        cmap_combo.addItems(cmap_options)
-        cmap_combo.setCurrentText(self.current_cmap)
-        layout.addRow("Colormap", cmap_combo)
-
-        sliders: list[QtWidgets.QSlider] = []
-        count = max(self.iso_surface_spin.value(), 2)
-        base_opacities = np.linspace(1.0, 0.2, count)
-        if self.iso_opacity_overrides:
-            for idx, val in enumerate(self.iso_opacity_overrides):
-                if idx < count:
-                    base_opacities[idx] = float(np.clip(val, 0.05, 1.0))
-        for i in range(count):
-            slider = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal, dialog)
-            slider.setRange(5, 100)
-            slider.setValue(int(base_opacities[i] * 100))
-            slider.setTickPosition(QtWidgets.QSlider.TickPosition.TicksBelow)
-            sliders.append(slider)
-            layout.addRow(f"Iso surface {i + 1}", slider)
-
-        buttons = QtWidgets.QDialogButtonBox(
-            QtWidgets.QDialogButtonBox.StandardButton.Ok | QtWidgets.QDialogButtonBox.StandardButton.Cancel
+        QtWidgets.QMessageBox.information(
+            self,
+            "Transfer Function",
+            "Advanced transfer function editing is not available yet.\n"
+            "Use the opacity scale and cutoff sliders to refine the volume.",
         )
-        buttons.accepted.connect(dialog.accept)
-        buttons.rejected.connect(dialog.reject)
-        layout.addRow(buttons)
-
-        if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
-            self.iso_opacity_overrides = [slider.value() / 100.0 for slider in sliders]
-            new_cmap = cmap_combo.currentText()
-            if new_cmap != self.current_cmap:
-                self.current_cmap = new_cmap
-                self.cmap_combo.setCurrentText(new_cmap)
-            self._render_orbital()
 
     def _open_slice_tf_dialog(self) -> None:
         dialog = QtWidgets.QDialog(self)
@@ -729,9 +851,9 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         layout = QtWidgets.QFormLayout(dialog)
 
         cmap_combo = QtWidgets.QComboBox(dialog)
-        cmap_options = [self.slice_cmap_combo.itemText(i) for i in range(self.slice_cmap_combo.count())]
+        cmap_options = [self.cmap_combo.itemText(i) for i in range(self.cmap_combo.count())]
         cmap_combo.addItems(cmap_options)
-        cmap_combo.setCurrentText(self.slice_cmap)
+        cmap_combo.setCurrentText(self.current_cmap)
         layout.addRow("Colormap", cmap_combo)
 
         vmin_spin = QtWidgets.QDoubleSpinBox(dialog)
@@ -761,8 +883,10 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         layout.addRow(buttons)
 
         if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
-            self.slice_cmap = cmap_combo.currentText()
-            self.slice_cmap_combo.setCurrentText(self.slice_cmap)
+            new_cmap = cmap_combo.currentText()
+            if new_cmap != self.current_cmap:
+                self.current_cmap = new_cmap
+                self.cmap_combo.setCurrentText(new_cmap)
             vmin = None if vmin_spin.value() == 0.0 and vmin_spin.specialValueText() else vmin_spin.value()
             vmax = None if vmax_spin.value() == 0.0 and vmax_spin.specialValueText() else vmax_spin.value()
             self.slice_vmin = vmin
@@ -810,6 +934,11 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         if trigger_render:
             self._render_orbital()
 
+    def _sync_slice_controls(self) -> None:
+        if self.slice_normal is None:
+            return
+        self._set_slice_normal(self.slice_normal, update_controls=True, trigger_render=False)
+
     def _set_offset(self, value: float) -> None:
         self.slice_offset = float(value)
         if self.offset_slider:
@@ -837,15 +966,6 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
                 self.plotter.add_light(light)
         except Exception:
             pass
-
-    def _start_distance_measurement(self) -> None:
-        self.plotter_frame.start_distance_measurement()
-
-    def _start_angle_measurement(self) -> None:
-        self.plotter_frame.start_angle_measurement()
-
-    def _clear_measurements(self) -> None:
-        self.plotter_frame.stop_measurements()
 
     def _cache_key(self, n: int, l: int, m: int) -> tuple:
         return (
@@ -920,6 +1040,8 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         self.plotter_frame.reset_scene()
         self.slice_view.clear()
         self.slice_plane_actor = None
+        if self.clipping_controller and self.clip_mode != "none":
+            self.clipping_controller.set_mode(self.clip_mode)
         if self.camera_initialized and camera_state:
             try:
                 self.plotter.camera_position = camera_state
@@ -927,80 +1049,39 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
                 pass
         if not fields:
             return
-        if self.current_representation == "volume":
-            prob_arr = np.asarray(vol_field.dataset.get_array("probability"))
-            vmax = float(np.nanmax(prob_arr)) if prob_arr.size else 1.0
-            if vmax <= 0:
-                vmax = 1.0
-            clim = (0.0, vmax)
-            label = "Probability"
-        else:
-            if fields[0].scalar_name == "phase":
-                clim = (-np.pi, np.pi)
-                label = "Phase (rad)"
-            else:
-                vmax = 1.0
-                for f in fields:
-                    arr = np.asarray(f.dataset[f.scalar_name]) if f.dataset.get_array(f.scalar_name) is not None else np.array([])
-                    if arr.size:
-                        vmax = max(vmax, float(np.nanmax(arr)))
-                if vmax == 0:
-                    vmax = 1.0
-                clim = (0.0, vmax)
-                label = "Amplitude"
-
-        iso_text = ""
-        if self.current_representation == "surface":
-            last = fields[0]
-            if last.cumulative_probability is not None:
-                iso_text = f"Contains {last.cumulative_probability*100:.1f}% of probability"
-
-        if self.current_representation == "volume":
-            self._add_iso_surfaces(vol_field, clim)
-        else:
-            for field in fields:
-                self.plotter.add_mesh(
-                    field.dataset,
-                    scalars=field.scalar_name,
-                    cmap=self.current_cmap,
-                    opacity=field.opacity,
-                    specular=0.55,
-                    specular_power=25.0,
-                    diffuse=0.8,
-                    ambient=0.25,
-                    smooth_shading=True,
-                    clim=clim,
-                    show_scalar_bar=False,
-                )
+        prob_arr = np.asarray(vol_field.dataset.get_array("probability"))
+        prob_scaled = self._prepare_volume_scalars(vol_field.dataset, prob_arr)
+        clim = (0.0, 1.0) if prob_arr.size else (0.0, 1.0)
+        label = "Electron Density"
+        self._add_volume_render(vol_field, prob_scaled)
+        self._log_volume_bounds()
+        try:
+            self.plotter.reset_camera()
+            self.plotter.camera.zoom(1.1)
+        except Exception:
+            pass
         main_title = f"{self.current_symbol} n={self.current_n}, l={self.current_l}, m={self.current_m}"
         if self.show_occupied:
             main_title += " (occupied)"
-        self.plotter.add_text(
+        self._add_overlay_text(
             main_title,
             font_size=12,
-            color=self._text_color,
-            shadow=self._text_shadow,
             name="main_title",
             position="upper_left",
         )
         view_label = "3D View (volume)" if self.current_representation == "volume" else "3D View (surface)"
-        self.plotter.add_text(
+        self._add_overlay_text(
             view_label,
             font_size=10,
-            color=self._text_color,
-            shadow=self._text_shadow,
             name="view_label",
             position="upper_right",
         )
-        if iso_text:
-            self.plotter.add_text(
-                iso_text,
-                font_size=10,
-                color=self._text_color,
-                shadow=self._text_shadow,
-                name="iso_text",
-                position="lower_left",
-            )
+        self._add_overlay_text(
+            "Volume rendering",
+            font_size=10,
+            name="iso_text",
+            position="lower_left",
+        )
         # 3D colorbar suppressed; handled in 2D slice
         self._apply_slice(fields, vol_field, clim)
         if not self.camera_initialized:
@@ -1011,10 +1092,31 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
                 self.plotter.render()
             except Exception as exc:
                 print(f"Render error: {exc}", file=sys.stderr)
+        if self.volume_renderer_mode == "auto" and not self._auto_volume_fallback_attempted:
+            if self._last_volume_mapper_mode == "gpu" and self._volume_render_seems_blank():
+                self._auto_volume_fallback_attempted = True
+                self.volume_renderer_mode = "cpu"
+                if self.volume_renderer_combo:
+                    self.volume_renderer_combo.blockSignals(True)
+                    self.volume_renderer_combo.setCurrentIndex(2)
+                    self.volume_renderer_combo.blockSignals(False)
+                self._show_volume_status("Switched to CPU volume renderer for compatibility.")
+                self._render_orbital()
         try:
             self.slice_view.render()
         except Exception:
             pass
+
+    def _add_overlay_text(self, text: str, font_size: int, name: str, position: str) -> None:
+        actor = self.plotter.add_text(
+            text,
+            font_size=font_size,
+            color=self._text_color,
+            shadow=self._text_shadow,
+            name=name,
+            position=position,
+        )
+        self._apply_text_backdrop(actor)
 
     def eventFilter(self, obj, event):
         if obj is self.slice_container and event.type() == QtCore.QEvent.Resize:
@@ -1117,6 +1219,112 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
             except Exception as exc:
                 print(f"Iso-surface error: {exc}", file=sys.stderr)
 
+    def _build_color_transfer(self, cmap: str, vmin: float, vmax: float) -> vtk.vtkColorTransferFunction:
+        import matplotlib.cm as cm
+
+        cmap_obj = self._get_cmap(cmap) if isinstance(cmap, str) else cmap
+        color_tf = vtk.vtkColorTransferFunction()
+        for i in range(6):
+            t = i / 5
+            value = vmin + (vmax - vmin) * t
+            r, g, b, _ = cmap_obj(t)
+            color_tf.AddRGBPoint(value, r, g, b)
+        return color_tf
+
+    def _build_opacity_transfer(self, values: np.ndarray, vmin: float, vmax: float) -> vtk.vtkPiecewiseFunction:
+        opacity_tf = vtk.vtkPiecewiseFunction()
+        if values.size == 0:
+            opacity_tf.AddPoint(vmin, 0.0)
+            opacity_tf.AddPoint(vmax, min(1.0, self.opacity_scale))
+            return opacity_tf
+        low_val = float(self.opacity_low)
+        high_val = float(self.opacity_high)
+        low_val = min(max(low_val, 0.0), 1.0)
+        high_val = min(max(high_val, 0.0), 1.0)
+        if high_val <= low_val:
+            high_val = min(1.0, low_val + 0.05)
+        mid_val = max(low_val + 0.05, 0.15)
+        opacity_tf.AddPoint(0.0, 0.0)
+        opacity_tf.AddPoint(low_val, 0.0)
+        opacity_tf.AddPoint(mid_val, min(1.0, 0.2 * self.opacity_scale))
+        opacity_tf.AddPoint(0.6, min(1.0, 0.6 * self.opacity_scale))
+        opacity_tf.AddPoint(1.0, min(1.0, 0.9 * self.opacity_scale))
+        return opacity_tf
+
+    def _build_clipping_planes(self) -> list[vtk.vtkPlane]:
+        planes: list[vtk.vtkPlane] = []
+        if self.clip_mode == "plane" and self.clip_plane_normal is not None and self.clip_plane_origin is not None:
+            plane = vtk.vtkPlane()
+            normal = np.array(self.clip_plane_normal, dtype=float)
+            if self.clip_invert:
+                normal = -normal
+            plane.SetNormal(*normal)
+            plane.SetOrigin(*self.clip_plane_origin)
+            planes.append(plane)
+            return planes
+        if self.clip_mode == "box" and self.clip_box_bounds is not None:
+            box = vtk.vtkBox()
+            box.SetBounds(*self.clip_box_bounds)
+            box_planes = vtk.vtkPlanes()
+            box.GetPlanes(box_planes)
+            for i in range(box_planes.GetNumberOfPlanes()):
+                planes.append(box_planes.GetPlane(i))
+            return planes
+        return planes
+
+    def _add_volume_render(self, volume_field, values: np.ndarray) -> None:
+        dataset = volume_field.dataset
+        if "density_render" in dataset.array_names:
+            try:
+                dataset.set_active_scalars("density_render")
+            except Exception:
+                pass
+        vmin = float(np.nanmin(values)) if values.size else 0.0
+        vmax = float(np.nanmax(values)) if values.size else 1.0
+        if vmax <= vmin:
+            vmax = vmin + 1e-6
+        mapper = None
+        planes = self._build_clipping_planes()
+        color_tf = self._build_color_transfer(self.current_cmap, 0.0, 1.0)
+        opacity_tf = self._build_opacity_transfer(values, 0.0, 1.0)
+        color_tf.SetRange(0.0, 1.0)
+        prop = vtk.vtkVolumeProperty()
+        prop.SetColor(color_tf)
+        prop.SetScalarOpacity(opacity_tf)
+        prop.SetInterpolationTypeToLinear()
+        prop.ShadeOn()
+        volume = vtk.vtkVolume()
+        mapper_mode = self.volume_renderer_mode
+        chosen_mode = "gpu" if mapper_mode in ("auto", "gpu") else "cpu"
+        if chosen_mode == "cpu":
+            mapper = vtk.vtkFixedPointVolumeRayCastMapper()
+            mapper.SetInputData(dataset)
+        else:
+            mapper = vtk.vtkSmartVolumeMapper()
+            mapper.SetInputData(dataset)
+            mapper.SetBlendModeToComposite()
+            if mapper_mode == "gpu" and hasattr(mapper, "SetRequestedRenderModeToGPU"):
+                mapper.SetRequestedRenderModeToGPU()
+        if planes:
+            if hasattr(mapper, "RemoveAllClippingPlanes"):
+                mapper.RemoveAllClippingPlanes()
+            if hasattr(mapper, "AddClippingPlane"):
+                for plane in planes:
+                    mapper.AddClippingPlane(plane)
+            else:
+                plane_collection = vtk.vtkPlaneCollection()
+                for plane in planes:
+                    plane_collection.AddItem(plane)
+                mapper.SetClippingPlanes(plane_collection)
+        volume.SetMapper(mapper)
+        volume.SetProperty(prop)
+        self.plotter.renderer.AddVolume(volume)
+        self._last_volume_mapper_mode = chosen_mode
+        try:
+            self._volume_bounds = volume.GetBounds()
+        except Exception:
+            self._volume_bounds = None
+
     def _render_slice_colorbar(self, cmap: str, clim: tuple[float, float], label: str) -> None:
         if not getattr(self, "slice_colorbar", None):
             return
@@ -1133,7 +1341,9 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
             sm = cm.ScalarMappable(norm=norm, cmap=cmap_obj)
             fig, ax = plt.subplots(figsize=(4.2, 0.5))
             colors_token = (self._theme_tokens or {}).get("colors", {})
-            fig.patch.set_facecolor(colors_token.get("surfaceAlt", "#0f172a"))
+            panel_color = colors_token.get("surfaceAlt", "#0f172a")
+            fig.patch.set_facecolor(panel_color)
+            ax.set_facecolor(panel_color)
             cbar = fig.colorbar(sm, cax=ax, orientation="horizontal")
             label_color = colors_token.get("text", "#e5e7eb")
             cbar.set_label(f"$\\mathrm{{{label}}}$", color=label_color, fontsize=8)
@@ -1142,6 +1352,7 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
             cbar.formatter = formatter
             cbar.update_ticks()
             cbar.ax.tick_params(labelsize=7, colors=label_color)
+            cbar.ax.set_facecolor(panel_color)
             cbar.outline.set_edgecolor(label_color)
             for spine in ax.spines.values():
                 spine.set_edgecolor(label_color)
@@ -1155,9 +1366,11 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
             self.slice_colorbar.setPixmap(pixmap)
             self.slice_colorbar.setMinimumHeight(pixmap.height() + 6)
             border_color = colors_token.get("border", "#1f2937")
+            panel_color = QtGui.QColor(colors_token.get("surfaceAlt", "#0f172a"))
+            panel_color.setAlpha(220)
             self.slice_colorbar.setStyleSheet(
                 "background-color: {bg}; color: {text}; border: 1px solid {border}; padding: 6px;".format(
-                    bg=colors_token.get("surfaceAlt", "#0f172a"),
+                    bg=panel_color.name(QtGui.QColor.HexArgb),
                     text=label_color,
                     border=border_color,
                 )
@@ -1202,7 +1415,12 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
             self._render_orbital()
 
     def _apply_slice(self, fields, volume_field, clim: tuple[float, float]) -> None:
-        normal = self.slice_normal
+        use_clip_plane = (
+            self.clip_mode == "plane"
+            and self.clip_plane_normal is not None
+            and self.clip_plane_origin is not None
+        )
+        normal = self.clip_plane_normal if use_clip_plane else self.slice_normal
         norm = np.linalg.norm(normal)
         if norm < 1e-6:
             return
@@ -1226,13 +1444,24 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
                     self.offset_slider.setRange(-slider_range, slider_range)
                     self.offset_slider.blockSignals(False)
 
-        origin = np.array(volume_ds.center) + normal * self.slice_offset
+        if use_clip_plane:
+            origin = np.array(self.clip_plane_origin, dtype=float)
+            self.slice_origin = origin
+        elif self.slice_origin is not None:
+            origin = self.slice_origin
+        else:
+            origin = np.array(volume_ds.center) + normal * self.slice_offset
         plane_size = extent * 1.2 if extent and extent > 0 else 5.0
 
         try:
-            if self.pref_show_slice_plane:
+            if self.pref_show_slice_plane and use_clip_plane:
                 plane_geom = pv.Plane(
-                    center=origin, direction=normal, i_size=plane_size, j_size=plane_size, i_resolution=20, j_resolution=20
+                    center=origin,
+                    direction=normal,
+                    i_size=plane_size,
+                    j_size=plane_size,
+                    i_resolution=self.slice_plane_resolution,
+                    j_resolution=self.slice_plane_resolution,
                 )
                 opacity_val = max(0.0, min(1.0, float(getattr(self, "pref_slice_plane_opacity", 0.35))))
                 if self.slice_plane_actor:
@@ -1294,9 +1523,16 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
                 return zeros
 
             prob_vals = _ensure_array("probability")
+            prob_scaled_vals = None
+            try:
+                prob_scaled_vals = _ensure_array("density_render")
+            except Exception:
+                prob_scaled_vals = None
             amp_vals = _ensure_array("amplitude")
             phase_vals = _ensure_array("phase")
             prob_vals = np.nan_to_num(prob_vals, nan=0.0, posinf=0.0, neginf=0.0)
+            if prob_scaled_vals is not None:
+                prob_scaled_vals = np.nan_to_num(prob_scaled_vals, nan=0.0, posinf=0.0, neginf=0.0)
             amp_vals = np.nan_to_num(amp_vals, nan=0.0, posinf=0.0, neginf=0.0)
             phase_vals = np.nan_to_num(phase_vals, nan=0.0, posinf=0.0, neginf=0.0)
             cum_vals = np.zeros_like(prob_vals, dtype=float)
@@ -1309,11 +1545,11 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
             plane["cum_prob"] = cum_vals
 
             self.slice_view.clear()
-            slice_cmap = getattr(self, "slice_cmap", self.current_cmap)
+            slice_cmap = self.current_cmap
             slice_clim = clim
             scalar_name = "probability"
-            scalar_data = prob_vals
-            label = "Probability"
+            scalar_data = prob_scaled_vals if prob_scaled_vals is not None else prob_vals
+            label = "Electron Density"
 
             if self.slice_scalar_mode == "cumulative":
                 scalar_name = "slice_scalar"
@@ -1336,9 +1572,12 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
                 slice_clim = (-np.pi, np.pi)
                 label = "Phase"
             else:
+                if prob_scaled_vals is not None and prob_scaled_vals.size:
+                    slice_clim = (0.0, 1.0)
                 if self.slice_vmin is not None or self.slice_vmax is not None:
-                    vmin = self.slice_vmin if self.slice_vmin is not None else float(np.nanmin(prob_vals))
-                    vmax = self.slice_vmax if self.slice_vmax is not None else float(np.nanmax(prob_vals))
+                    source_vals = scalar_data if scalar_data is not None else prob_vals
+                    vmin = self.slice_vmin if self.slice_vmin is not None else float(np.nanmin(source_vals))
+                    vmax = self.slice_vmax if self.slice_vmax is not None else float(np.nanmax(source_vals))
                     if vmax <= vmin:
                         vmax = vmin + 1e-6
                     slice_clim = (vmin, vmax)
@@ -1383,7 +1622,7 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
             except Exception:
                 pass
 
-            self.slice_view.add_text(
+            actor = self.slice_view.add_text(
                 "2D Slice",
                 position="upper_right",
                 font_size=10,
@@ -1391,6 +1630,7 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
                 shadow=self._text_shadow,
                 name="slice_label",
             )
+            self._apply_text_backdrop(actor)
 
             pos = origin + normal * (extent if extent and extent > 0 else 5.0)
             up = np.array([0, 0, 1])
@@ -1496,6 +1736,7 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
                 shadow=self._text_shadow,
                 name="scale_bar",
             )
+            self._apply_text_backdrop(self._scale_bar_text)
         except Exception as exc:
             print(f"Scalebar render error: {exc}", file=sys.stderr)
 
@@ -1505,6 +1746,22 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
     def _autoscale(self) -> None:
         self.plotter.reset_camera()
         self.camera_initialized = True
+
+    def _wrap_viewport_frame(self, widget: QtWidgets.QWidget) -> None:
+        parent_layout = widget.parentWidget().layout() if widget.parentWidget() else None
+        if not parent_layout:
+            return
+        index = parent_layout.indexOf(widget)
+        if index < 0:
+            return
+        parent_layout.takeAt(index)
+        frame = QtWidgets.QFrame(widget.parentWidget())
+        frame.setObjectName("minecraftViewportFrame")
+        frame_layout = QtWidgets.QVBoxLayout(frame)
+        frame_layout.setContentsMargins(6, 6, 6, 6)
+        widget.setParent(frame)
+        frame_layout.addWidget(widget)
+        parent_layout.insertWidget(index, frame)
 
     def _open_preferences(self) -> None:
         dialog = QtWidgets.QDialog(self)
