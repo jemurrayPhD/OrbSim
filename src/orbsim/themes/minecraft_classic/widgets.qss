@@ -8,13 +8,23 @@ QGroupBox,
 QAbstractItemView,
 QTabBar,
 QTabWidget::pane,
+QTabBar::tab,
 QCheckBox,
-QRadioButton {
+QRadioButton,
+QMenuBar,
+QMenu,
+QStatusBar,
+QHeaderView::section {
   color: #1a1a1a;
 }
 
 QGroupBox::title {
   color: #1a1a1a;
+}
+
+QGroupBox::title:disabled,
+QTabBar::tab:disabled {
+  color: #4a4a4a;
 }
 
 QWidget:disabled,
@@ -26,7 +36,7 @@ QComboBox:disabled,
 QLineEdit:disabled,
 QSpinBox:disabled,
 QDoubleSpinBox:disabled {
-  color: #5f5f5f;
+  color: #4a4a4a;
 }
 
 QFrame#minecraftViewportFrame {
@@ -103,13 +113,26 @@ QTreeWidget:focus {
 
 QLineEdit::placeholder,
 QTextEdit::placeholder {
-  color: #4a4a4a;
+  color: #3b3b3b;
 }
 
 QComboBox QAbstractItemView {
   background: #c6c6c6;
   color: #1a1a1a;
   border: 2px solid #303030;
+}
+
+QAbstractItemView::item:selected,
+QMenu::item:selected {
+  background: #8daed0;
+  color: #1a1a1a;
+}
+
+QLineEdit:disabled,
+QComboBox:disabled,
+QSpinBox:disabled,
+QDoubleSpinBox:disabled {
+  background: #b0b0b0;
 }
 
 QLabel#craftingHeaderLabel,

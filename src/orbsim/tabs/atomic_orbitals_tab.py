@@ -278,6 +278,7 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         self._theme_tokens: dict | None = None
         self._text_color = "#ffffff"
         self._text_shadow = True
+        self._text_backdrop_opacity = 0.4
         self._slice_plane_color = "#cbd5e1"
         self._slice_plane_edge_color = "#94a3b8"
         self.plotter_frame = self.ui.plotterFrame
@@ -371,6 +372,7 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         mode = tokens.get("meta", {}).get("mode", "light")
         self._text_color = colors["text"]
         self._text_shadow = mode in ("dark", "high_contrast")
+        self._text_backdrop_opacity = 0.6 if mode == "light" else 0.4
         self._slice_plane_color = colors["surfaceAlt"]
         self._slice_plane_edge_color = colors["surfaceAlt"] if mode == "high_contrast" else colors["border"]
         self.plotter_frame.apply_theme(tokens)
@@ -390,6 +392,79 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
             "color: {text}; padding: 2px; font-size: 10px;".format(text=colors["textMuted"])
         )
         self._update_slice_scalebar()
+
+    def _apply_text_backdrop(self, actor) -> None:
+        try:
+            prop = actor.GetTextProperty()
+            if prop:
+                background = QtGui.QColor(self._text_color)
+                if self._theme_tokens and self._theme_tokens.get("colors"):
+                    background = QtGui.QColor(self._theme_tokens["colors"].get("surfaceAlt", "#0f172a"))
+                prop.SetBackgroundColor(background.redF(), background.greenF(), background.blueF())
+                prop.SetBackgroundOpacity(self._text_backdrop_opacity)
+        except Exception:
+            pass
+
+    def _prepare_volume_scalars(self, dataset, prob_arr: np.ndarray) -> np.ndarray:
+        logger = logging.getLogger(__name__)
+        prob_arr = np.asarray(prob_arr)
+        if prob_arr.size == 0:
+            return np.array([], dtype=np.float32)
+        nan_count = int(np.isnan(prob_arr).sum())
+        prob_raw = np.nan_to_num(prob_arr, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)
+        p1 = float(np.percentile(prob_raw, 1.0))
+        p50 = float(np.percentile(prob_raw, 50.0))
+        p99 = float(np.percentile(prob_raw, 99.0))
+        if p99 <= p1:
+            p99 = p1 + 1e-6
+        prob_clip = np.clip(prob_raw, p1, p99)
+        prob_scaled = (prob_clip - p1) / max(p99 - p1, 1e-12)
+        prob_scaled = np.clip(prob_scaled, 0.0, 1.0).astype(np.float32)
+        dataset["density_raw"] = prob_raw
+        dataset["density_render"] = prob_scaled
+        try:
+            dataset.set_active_scalars("density_render")
+        except Exception:
+            try:
+                dataset.active_scalars_name = "density_render"
+            except Exception:
+                pass
+        try:
+            point_data = dataset.GetPointData()
+            if point_data:
+                scalars = point_data.GetArray("density_render")
+                if scalars:
+                    point_data.SetScalars(scalars)
+        except Exception:
+            pass
+        logger.debug(
+            "Volume scalars: raw dtype=%s range=(%.4g, %.4g) p1/p50/p99=(%.4g, %.4g, %.4g) nan=%d "
+            "render dtype=%s range=(%.4g, %.4g)",
+            prob_raw.dtype,
+            float(np.min(prob_raw)),
+            float(np.max(prob_raw)),
+            p1,
+            p50,
+            p99,
+            nan_count,
+            prob_scaled.dtype,
+            float(np.min(prob_scaled)),
+            float(np.max(prob_scaled)),
+        )
+        return prob_scaled
+
+    def _log_volume_bounds(self) -> None:
+        if not self._volume_bounds:
+            return
+        logger = logging.getLogger(__name__)
+        bounds = self._volume_bounds
+        logger.debug("Volume bounds: %s", bounds)
+        try:
+            ranges = (bounds[1] - bounds[0], bounds[3] - bounds[2], bounds[5] - bounds[4])
+            if any(r <= 0 for r in ranges):
+                logger.warning("Volume bounds appear degenerate: %s", bounds)
+        except Exception:
+            pass
 
     def _get_cmap(self, name: str):
         return resolve_cmap(name)
@@ -975,42 +1050,11 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         if not fields:
             return
         prob_arr = np.asarray(vol_field.dataset.get_array("probability"))
-        prob_scaled = prob_arr
-        if prob_arr.size:
-            nan_count = int(np.isnan(prob_arr).sum())
-            prob_raw = np.nan_to_num(prob_arr, nan=0.0, posinf=0.0, neginf=0.0)
-            vmin = float(np.percentile(prob_raw, 1.0))
-            vmax = float(np.percentile(prob_raw, 99.5))
-            if vmax <= vmin:
-                vmax = vmin + 1e-6
-            prob_clip = np.clip(prob_raw, vmin, vmax)
-            prob_scaled = (prob_clip - vmin) / max(vmax - vmin, 1e-12)
-            prob_scaled = np.nan_to_num(prob_scaled, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)
-            vol_field.dataset["density_raw"] = prob_raw.astype(np.float32)
-            vol_field.dataset["density_render"] = prob_scaled
-            try:
-                vol_field.dataset.active_scalars_name = "density_render"
-            except Exception:
-                pass
-            logging.getLogger(__name__).debug(
-                "Volume scalars: raw dtype=%s range=(%.4g, %.4g) p1/p50/p99=(%.4g, %.4g, %.4g) nan=%d "
-                "render dtype=%s range=(%.4g, %.4g)",
-                prob_raw.dtype,
-                float(np.min(prob_raw)),
-                float(np.max(prob_raw)),
-                vmin,
-                float(np.percentile(prob_raw, 50.0)),
-                float(np.percentile(prob_raw, 99.0)),
-                nan_count,
-                prob_scaled.dtype,
-                float(np.min(prob_scaled)),
-                float(np.max(prob_scaled)),
-            )
+        prob_scaled = self._prepare_volume_scalars(vol_field.dataset, prob_arr)
         clim = (0.0, 1.0) if prob_arr.size else (0.0, 1.0)
         label = "Electron Density"
         self._add_volume_render(vol_field, prob_scaled)
-        if self._volume_bounds:
-            logging.getLogger(__name__).debug("Volume bounds: %s", self._volume_bounds)
+        self._log_volume_bounds()
         try:
             self.plotter.reset_camera()
             self.plotter.camera.zoom(1.1)
@@ -1072,16 +1116,7 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
             name=name,
             position=position,
         )
-        try:
-            prop = actor.GetTextProperty()
-            if prop:
-                background = QtGui.QColor(self._text_color)
-                if self._theme_tokens and self._theme_tokens.get("colors"):
-                    background = QtGui.QColor(self._theme_tokens["colors"].get("surfaceAlt", "#0f172a"))
-                prop.SetBackgroundColor(background.redF(), background.greenF(), background.blueF())
-                prop.SetBackgroundOpacity(0.4)
-        except Exception:
-            pass
+        self._apply_text_backdrop(actor)
 
     def eventFilter(self, obj, event):
         if obj is self.slice_container and event.type() == QtCore.QEvent.Resize:
@@ -1204,6 +1239,8 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
             return opacity_tf
         low_val = float(self.opacity_low)
         high_val = float(self.opacity_high)
+        low_val = min(max(low_val, 0.0), 1.0)
+        high_val = min(max(high_val, 0.0), 1.0)
         if high_val <= low_val:
             high_val = min(1.0, low_val + 0.05)
         mid_val = max(low_val + 0.05, 0.15)
@@ -1246,9 +1283,7 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         vmax = float(np.nanmax(values)) if values.size else 1.0
         if vmax <= vmin:
             vmax = vmin + 1e-6
-        mapper = vtk.vtkSmartVolumeMapper()
-        mapper.SetInputData(dataset)
-        mapper.SetBlendModeToComposite()
+        mapper = None
         planes = self._build_clipping_planes()
         color_tf = self._build_color_transfer(self.current_cmap, 0.0, 1.0)
         opacity_tf = self._build_opacity_transfer(values, 0.0, 1.0)
@@ -1264,6 +1299,12 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         if chosen_mode == "cpu":
             mapper = vtk.vtkFixedPointVolumeRayCastMapper()
             mapper.SetInputData(dataset)
+        else:
+            mapper = vtk.vtkSmartVolumeMapper()
+            mapper.SetInputData(dataset)
+            mapper.SetBlendModeToComposite()
+            if mapper_mode == "gpu" and hasattr(mapper, "SetRequestedRenderModeToGPU"):
+                mapper.SetRequestedRenderModeToGPU()
         if planes:
             if hasattr(mapper, "RemoveAllClippingPlanes"):
                 mapper.RemoveAllClippingPlanes()
@@ -1300,7 +1341,9 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
             sm = cm.ScalarMappable(norm=norm, cmap=cmap_obj)
             fig, ax = plt.subplots(figsize=(4.2, 0.5))
             colors_token = (self._theme_tokens or {}).get("colors", {})
-            fig.patch.set_facecolor(colors_token.get("surfaceAlt", "#0f172a"))
+            panel_color = colors_token.get("surfaceAlt", "#0f172a")
+            fig.patch.set_facecolor(panel_color)
+            ax.set_facecolor(panel_color)
             cbar = fig.colorbar(sm, cax=ax, orientation="horizontal")
             label_color = colors_token.get("text", "#e5e7eb")
             cbar.set_label(f"$\\mathrm{{{label}}}$", color=label_color, fontsize=8)
@@ -1309,6 +1352,7 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
             cbar.formatter = formatter
             cbar.update_ticks()
             cbar.ax.tick_params(labelsize=7, colors=label_color)
+            cbar.ax.set_facecolor(panel_color)
             cbar.outline.set_edgecolor(label_color)
             for spine in ax.spines.values():
                 spine.set_edgecolor(label_color)
@@ -1586,16 +1630,7 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
                 shadow=self._text_shadow,
                 name="slice_label",
             )
-            try:
-                prop = actor.GetTextProperty()
-                if prop:
-                    background = QtGui.QColor(self._text_color)
-                    if self._theme_tokens and self._theme_tokens.get("colors"):
-                        background = QtGui.QColor(self._theme_tokens["colors"].get("surfaceAlt", "#0f172a"))
-                    prop.SetBackgroundColor(background.redF(), background.greenF(), background.blueF())
-                    prop.SetBackgroundOpacity(0.4)
-            except Exception:
-                pass
+            self._apply_text_backdrop(actor)
 
             pos = origin + normal * (extent if extent and extent > 0 else 5.0)
             up = np.array([0, 0, 1])
@@ -1701,6 +1736,7 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
                 shadow=self._text_shadow,
                 name="scale_bar",
             )
+            self._apply_text_backdrop(self._scale_bar_text)
         except Exception as exc:
             print(f"Scalebar render error: {exc}", file=sys.stderr)
 
