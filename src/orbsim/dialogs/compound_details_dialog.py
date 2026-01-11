@@ -5,6 +5,7 @@ from pathlib import Path
 from PySide6 import QtCore, QtGui, QtNetwork, QtWidgets
 
 from orbsim.chem.elements import get_atomic_number, get_element, get_symbol
+from orbsim.chem import compound_db
 
 
 def _element_family(symbol: str) -> str:
@@ -38,9 +39,6 @@ def _electronegativity_symbol(symbol: str) -> float | None:
 
 
 PUBCHEM_IMAGE_URL = "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/{cid}/PNG"
-PUBCHEM_CITATION_URL = "https://pubchem.ncbi.nlm.nih.gov/docs/citation-guidelines"
-
-
 class CompoundDetailsDialog(QtWidgets.QDialog):
     def __init__(self, compound: dict, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
@@ -93,17 +91,15 @@ class CompoundDetailsDialog(QtWidgets.QDialog):
         self.properties_label.setWordWrap(True)
         layout.addWidget(self.properties_label)
 
-        self.source_label = QtWidgets.QLabel("")
-        self.source_label.setOpenExternalLinks(True)
-        self.source_label.setWordWrap(True)
-        layout.addWidget(self.source_label)
-
         close_btn = QtWidgets.QPushButton("Close")
         close_btn.clicked.connect(self.accept)
         layout.addWidget(close_btn, 0, QtCore.Qt.AlignmentFlag.AlignRight)
 
     def _populate(self) -> None:
-        self.title_label.setText(f"{self.compound['name']} ({self.compound['formula']})")
+        display = compound_db.format_compound_display(self.compound)
+        title = display["primary_name"] or "Compound"
+        formula_display = display["formula_display"] or self.compound.get("formula") or ""
+        self.title_label.setText(f"{title} ({formula_display})")
 
         oxidation_states, heuristic = estimate_oxidation_states(self.compound)
         if heuristic:
@@ -115,20 +111,15 @@ class CompoundDetailsDialog(QtWidgets.QDialog):
         bonding_text, polarity_text = classify_bonding_and_polarity(self.compound)
         self.bonding_label.setText(f"Bonding: {bonding_text}. Polarity: {polarity_text}.")
 
-        properties = [
-            ("Molecular weight", self.compound.get("mol_weight")),
-            ("IUPAC name", self.compound.get("iupac_name")),
-        ]
-        synonyms = self.compound.get("synonyms") or []
-        if isinstance(synonyms, list) and synonyms:
-            properties.append(("Synonyms", ", ".join(synonyms[:5])))
+        properties = [("Molecular weight", self.compound.get("mol_weight"))]
+        if display["iupac_name"]:
+            properties.append(("IUPAC", display["iupac_name"]))
+        synonyms = self._clean_synonyms(display["synonyms"])
+        if synonyms:
+            properties.append(("Also known as", ", ".join(synonyms[:6])))
         prop_lines = [f"{label}: {value}" for label, value in properties if value]
         self.properties_label.setText("Known data: " + ("; ".join(prop_lines) if prop_lines else "Unavailable"))
-
-        self.source_label.setText(
-            "Data source: PubChem (NIH/NLM). "
-            f"<a href=\"{PUBCHEM_CITATION_URL}\">Citation guidelines</a>."
-        )
+        self.properties_label.setToolTip("Data source: PubChem (NIH/NLM).")
 
     def _populate_oxidation_table(self, oxidation_states: dict[str, int | None]) -> None:
         elements = self.compound.get("elements", {})
@@ -184,6 +175,30 @@ class CompoundDetailsDialog(QtWidgets.QDialog):
         else:
             self.image_label.setText("2D structure depiction unavailable.")
         reply.deleteLater()
+
+    @staticmethod
+    def _clean_synonyms(values: list[str]) -> list[str]:
+        cleaned: list[str] = []
+        seen = set()
+        for value in values:
+            text = str(value).strip()
+            if not text or len(text) > 80:
+                continue
+            lower = text.lower()
+            if "inchikey" in lower or lower.startswith("inchi=") or lower.startswith("inchi"):
+                continue
+            if lower.startswith("cas ") or lower.startswith("cas-"):
+                continue
+            if not any(ch.isalpha() for ch in text):
+                continue
+            digit_ratio = sum(ch.isdigit() for ch in text) / max(len(text), 1)
+            if digit_ratio > 0.6:
+                continue
+            if lower in seen:
+                continue
+            seen.add(lower)
+            cleaned.append(text)
+        return cleaned
 
 
 def estimate_oxidation_states(compound: dict) -> tuple[dict[str, int | None], bool]:

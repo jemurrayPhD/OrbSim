@@ -41,6 +41,7 @@ class ElementTileButton(QtWidgets.QAbstractButton):
         self.setText(text)
         self._symbol = ""
         self._atomic_number = 0
+        self._extra_text = ""
         self.setCheckable(True)
         self._base_color = QtGui.QColor("#94a3b8")
         self._text_color = QtGui.QColor("#0f172a")
@@ -70,6 +71,10 @@ class ElementTileButton(QtWidgets.QAbstractButton):
     def set_element(self, symbol: str, atomic_number: int) -> None:
         self._symbol = symbol
         self._atomic_number = atomic_number
+        self.update()
+
+    def set_extra_text(self, text: str) -> None:
+        self._extra_text = text or ""
         self.update()
 
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:
@@ -129,6 +134,17 @@ class ElementTileButton(QtWidgets.QAbstractButton):
                 rect.adjusted(6, 4, -6, -4),
                 QtCore.Qt.AlignmentFlag.AlignTop | QtCore.Qt.AlignmentFlag.AlignLeft,
                 str(self._atomic_number),
+            )
+        if self._extra_text:
+            extra_font = painter.font()
+            extra_font.setBold(False)
+            extra_font.setPointSize(max(self._font_point_size - 3, 7))
+            painter.setFont(extra_font)
+            painter.setPen(QtGui.QPen(self._text_color))
+            painter.drawText(
+                rect.adjusted(4, 0, -4, -4),
+                QtCore.Qt.AlignmentFlag.AlignBottom | QtCore.Qt.AlignmentFlag.AlignHCenter,
+                self._extra_text,
             )
         painter.end()
 
@@ -673,12 +689,12 @@ class OrbitalBoxView(QtWidgets.QWidget):
             painter.fillRect(self.rect(), QtGui.QColor(self._theme_colors["surface"]))
             painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
 
-            base_left = 70.0
-            base_top = 24.0
-            base_col_w = 120.0
-            base_box_w = 34.0
-            base_box_h = 24.0
-            base_spacing = 7.0
+            base_left = 64.0
+            base_top = 22.0
+            base_col_w = 140.0
+            base_box_w = 42.0
+            base_box_h = 30.0
+            base_spacing = 8.0
             label_map = {0: "s", 1: "p", 2: "d", 3: "f"}
 
             rows = [(n, l, subshells.get((n, l), 0)) for (n, l) in self._order if (n, l) in subshells]
@@ -703,7 +719,7 @@ class OrbitalBoxView(QtWidgets.QWidget):
 
             max_row = len(rows)
             avail_h = max(140.0, self.height() - 2 * margin)
-            base_row_h = 70.0 * min(1.1, scale_x + 0.2)
+            base_row_h = 78.0 * min(1.1, scale_x + 0.2)
             row_h = max(36.0, min(120.0, min(avail_h / max_row, base_row_h)))
             base_y = self.height() - margin - row_h
 
@@ -716,12 +732,12 @@ class OrbitalBoxView(QtWidgets.QWidget):
             arrow_x = left_margin / 2
             arrow_top = top_margin
             arrow_bottom = self.height() - margin
-            painter.setPen(QtGui.QPen(electron, 3.5))
+            painter.setPen(QtGui.QPen(electron, 2.0))
             painter.drawLine(arrow_x, arrow_bottom, arrow_x, arrow_top + 16)
             head = QtGui.QPolygonF([
                 QtCore.QPointF(arrow_x, arrow_top),
-                QtCore.QPointF(arrow_x - 9, arrow_top + 16),
-                QtCore.QPointF(arrow_x + 9, arrow_top + 16),
+                QtCore.QPointF(arrow_x - 7, arrow_top + 14),
+                QtCore.QPointF(arrow_x + 7, arrow_top + 14),
             ])
             painter.setBrush(QtGui.QBrush(electron))
             painter.drawPolygon(head)
@@ -745,6 +761,10 @@ class OrbitalBoxView(QtWidgets.QWidget):
                 label = f"{n}{label_map.get(l, '?')}"
                 painter.drawText(x, y - 6, label)
 
+                arrow_font = painter.font()
+                arrow_font.setBold(True)
+                arrow_font.setPointSize(max(int(box_h * 0.65), 10))
+                painter.setFont(arrow_font)
                 for j, (up, down) in enumerate(boxes):
                     bx = x + j * (box_w + spacing)
                     by = y
@@ -757,10 +777,10 @@ class OrbitalBoxView(QtWidgets.QWidget):
                         painter.setPen(QtGui.QPen(border, 2))
                     painter.drawRect(rect)
                     if up:
-                        painter.setPen(QtGui.QPen(electron, 2))
-                        painter.drawText(rect.center() + QtCore.QPointF(-4, 6), up)
+                        painter.setPen(QtGui.QPen(electron, 2.5))
+                        painter.drawText(rect, QtCore.Qt.AlignmentFlag.AlignCenter, up)
                     if down:
-                        painter.setPen(QtGui.QPen(electron, 2))
-                        painter.drawText(rect.center() + QtCore.QPointF(-4, 6), down)
+                        painter.setPen(QtGui.QPen(electron, 2.5))
+                        painter.drawText(rect, QtCore.Qt.AlignmentFlag.AlignCenter, down)
         finally:
             painter.end()

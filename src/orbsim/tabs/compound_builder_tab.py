@@ -5,6 +5,7 @@ import sys
 
 from PySide6 import QtCore, QtWidgets
 
+from orbsim.chem import compound_db
 from orbsim.chem.compound_db import db_exists, get_compound_details, get_db_path, query_compounds_by_elements
 from orbsim.chem.elements import get_atomic_number, get_symbol
 from orbsim.chem.formula_parser import parse_formula
@@ -44,6 +45,8 @@ class CompoundBuilderTab(QtWidgets.QWidget):
         self.ui.recipeSection.setMinimumSize(320, 320)
         self.ui.dataSection.setMinimumSize(360, 320)
         self.ui.inventorySection.setMinimumHeight(260)
+        self.ui.craftingLayout.setSpacing(10)
+        self.ui.currentElementsLabel.setContentsMargins(0, 6, 0, 0)
         self.upper_splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal, self)
         for section in (self.ui.craftingSection, self.ui.recipeSection, self.ui.dataSection):
             self.ui.upperLayout.removeWidget(section)
@@ -82,6 +85,10 @@ class CompoundBuilderTab(QtWidgets.QWidget):
             "font-weight: 600;"
             f"font-size: {font['titleSize']}px;"
             f"padding-bottom: {tokens['spacing']['xs']}px;"
+            "}"
+            "QLabel#currentElementsLabel {"
+            f"color: {colors['text']};"
+            f"padding-top: {tokens['spacing']['sm']}px;"
             "}"
             "QLineEdit, QListWidget {"
             f"background: {colors['surface']};"
@@ -186,7 +193,10 @@ class CompoundBuilderTab(QtWidgets.QWidget):
             self.ui.recipeListWidget.addItem(item)
             return
         for result in results:
-            label = f"{result['name']} — {result['formula']}"
+            display = compound_db.format_compound_display(result)
+            primary = display["primary_name"]
+            formula_display = display["formula_display"] or result["formula"]
+            label = f"{primary} — {formula_display}"
             item = QtWidgets.QListWidgetItem(label)
             item.setData(QtCore.Qt.ItemDataRole.UserRole, result["cid"])
             self.ui.recipeListWidget.addItem(item)

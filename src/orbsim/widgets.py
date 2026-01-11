@@ -11,6 +11,7 @@ from pyvistaqt import QtInteractor
 
 from orbsim.chem.elements import get_atomic_number, get_element, get_name, get_symbol
 from orbsim.theming.theme_manager import get_theme_manager
+from orbsim.chem import compound_db
 from orbsim.resources import load_icon
 
 @dataclass(frozen=True)
@@ -485,20 +486,24 @@ class ElementTileWidget(QtWidgets.QFrame):
         try:
             painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
             rect = self.rect().adjusted(1, 1, -1, -1)
-            radius = 6
+            radius = 0 if self._square else 6
             base = QtGui.QColor(self._theme_colors["surfaceAlt"])
             highlight = base.lighter(112)
             shadow = base.darker(112)
             painter.setPen(QtGui.QPen(QtGui.QColor(self._theme_colors["border"]), self._border_thickness))
-            painter.setBrush(QtGui.QBrush(base))
-            painter.drawRoundedRect(rect, radius, radius)
-            chamfer_rect = rect.adjusted(1, 1, -1, -1)
-            painter.setPen(QtGui.QPen(highlight, 1))
-            painter.drawLine(chamfer_rect.topLeft(), chamfer_rect.topRight())
-            painter.drawLine(chamfer_rect.topLeft(), chamfer_rect.bottomLeft())
-            painter.setPen(QtGui.QPen(shadow, 1))
-            painter.drawLine(chamfer_rect.bottomLeft(), chamfer_rect.bottomRight())
-            painter.drawLine(chamfer_rect.topRight(), chamfer_rect.bottomRight())
+            if self.element.atomic_number <= 0:
+                painter.setBrush(QtCore.Qt.NoBrush)
+                painter.drawRoundedRect(rect, radius, radius)
+            else:
+                painter.setBrush(QtGui.QBrush(base))
+                painter.drawRoundedRect(rect, radius, radius)
+                chamfer_rect = rect.adjusted(1, 1, -1, -1)
+                painter.setPen(QtGui.QPen(highlight, 1))
+                painter.drawLine(chamfer_rect.topLeft(), chamfer_rect.topRight())
+                painter.drawLine(chamfer_rect.topLeft(), chamfer_rect.bottomLeft())
+                painter.setPen(QtGui.QPen(shadow, 1))
+                painter.drawLine(chamfer_rect.bottomLeft(), chamfer_rect.bottomRight())
+                painter.drawLine(chamfer_rect.topRight(), chamfer_rect.bottomRight())
 
             manager = get_theme_manager()
             slot_texture = manager.texture_path("slot")
@@ -514,16 +519,17 @@ class ElementTileWidget(QtWidgets.QFrame):
                 painter.setPen(QtGui.QPen(QtGui.QColor(self._theme_colors["focusRing"]), 2))
                 painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), radius, radius)
 
-            symbol = get_symbol(self.element.atomic_number)
-            text_color = QtGui.QColor(self._theme_colors["text"])
-            painter.setPen(text_color)
-            font = painter.font()
-            font.setBold(True)
-            font.setPointSize(max(font.pointSize() + 4, 10))
-            painter.setFont(font)
-            painter.drawText(rect, QtCore.Qt.AlignmentFlag.AlignCenter, symbol)
+            if self.element.atomic_number > 0:
+                symbol = get_symbol(self.element.atomic_number)
+                text_color = QtGui.QColor(self._theme_colors["text"])
+                painter.setPen(text_color)
+                font = painter.font()
+                font.setBold(True)
+                font.setPointSize(max(font.pointSize() + 4, 10))
+                painter.setFont(font)
+                painter.drawText(rect, QtCore.Qt.AlignmentFlag.AlignCenter, symbol)
 
-            if self._show_atomic_number:
+            if self._show_atomic_number and self.element.atomic_number > 0:
                 small_font = painter.font()
                 small_font.setBold(False)
                 small_font.setPointSize(max(small_font.pointSize() - 4, 7))
@@ -797,8 +803,8 @@ class CraftingTableSlotWidget(QtWidgets.QFrame):
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setMinimumSize(76, 76)
-        self.setSizePolicy(QtWidgets.QSizePolicy.Policy.Preferred, QtWidgets.QSizePolicy.Policy.Preferred)
+        self.setMinimumSize(84, 84)
+        self.setSizePolicy(QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed)
         self.setAcceptDrops(True)
         self.setObjectName("craftingTableSlot")
         self._theme_tokens: dict | None = None
@@ -809,7 +815,7 @@ class CraftingTableSlotWidget(QtWidgets.QFrame):
         self.tile.set_show_atomic_number(False)
         self.tile.set_square(True)
         self.tile.setEnabled(False)
-        self.tile.setMinimumSize(76, 76)
+        self.tile.setMinimumSize(84, 84)
 
         self.add_button = QtWidgets.QToolButton()
         self.add_button.setAutoRaise(True)
@@ -830,16 +836,26 @@ class CraftingTableSlotWidget(QtWidgets.QFrame):
         self.sub_button.clicked.connect(self._decrement)
         self.clear_button.clicked.connect(self.clear_slot)
 
-        layout = QtWidgets.QVBoxLayout(self)
+        layout = QtWidgets.QGridLayout(self)
         layout.setContentsMargins(6, 6, 6, 6)
-        layout.addWidget(self.tile, 1)
+        layout.setSpacing(0)
+        layout.addWidget(self.tile, 0, 0, 1, 1)
 
-        controls = QtWidgets.QHBoxLayout()
+        controls_widget = QtWidgets.QWidget(self)
+        controls = QtWidgets.QHBoxLayout(controls_widget)
         controls.setContentsMargins(0, 0, 0, 0)
+        controls.setSpacing(4)
         controls.addWidget(self.add_button)
         controls.addWidget(self.sub_button)
         controls.addWidget(self.clear_button)
-        layout.addLayout(controls)
+        layout.addWidget(
+            controls_widget,
+            0,
+            0,
+            1,
+            1,
+            QtCore.Qt.AlignmentFlag.AlignBottom | QtCore.Qt.AlignmentFlag.AlignHCenter,
+        )
 
     def apply_theme(self, tokens: dict) -> None:
         self._theme_tokens = tokens
@@ -858,8 +874,8 @@ class CraftingTableSlotWidget(QtWidgets.QFrame):
             f"color: {colors['text']};"
             "background: transparent;"
             "border: 1px solid transparent;"
-            f"border-radius: {radii['sm']}px;"
-            f"padding: {tokens['spacing']['xs']}px;"
+            "border-radius: 0;"
+            f"padding: {max(1, tokens['spacing']['xs'] - 2)}px;"
             "}"
             "QToolButton:hover {"
             f"background: {colors['surface']};"
@@ -870,9 +886,11 @@ class CraftingTableSlotWidget(QtWidgets.QFrame):
             "}"
         )
         self.tile.apply_theme(tokens)
-        icon_size = max(12, int(tokens["spacing"]["lg"]))
+        icon_size = max(12, int(tokens["spacing"]["md"]))
+        button_size = max(icon_size + 8, 20)
         for button in (self.add_button, self.sub_button, self.clear_button):
             button.setIconSize(QtCore.QSize(icon_size, icon_size))
+            button.setFixedSize(button_size, button_size)
 
     def set_element(self, atomic_number: int, count: int = 1) -> None:
         self.atomic_number = atomic_number
@@ -949,7 +967,7 @@ class CraftingTableWidget(QtWidgets.QWidget):
         layout = QtWidgets.QGridLayout(self)
         layout.setSpacing(8)
         layout.setContentsMargins(4, 4, 4, 4)
-        min_slot = 76
+        min_slot = 84
         min_size = min_slot * 3 + layout.spacing() * 2 + layout.contentsMargins().left() + layout.contentsMargins().right()
         self.setMinimumSize(min_size, min_size)
         self._slots: list[CraftingTableSlotWidget] = []
@@ -959,6 +977,9 @@ class CraftingTableWidget(QtWidgets.QWidget):
                 slot.slot_changed.connect(self._emit_change)
                 layout.addWidget(slot, row, col)
                 self._slots.append(slot)
+            layout.setRowMinimumHeight(row, min_slot)
+        for col in range(3):
+            layout.setColumnMinimumWidth(col, min_slot)
 
     def apply_theme(self, tokens: dict) -> None:
         self._theme_tokens = tokens
@@ -1299,6 +1320,7 @@ class PeriodicTableInventoryWidget(QtWidgets.QScrollArea):
         self._layout = QtWidgets.QGridLayout(self._content)
         self._layout.setContentsMargins(6, 6, 6, 6)
         self._layout.setSpacing(4)
+        self._layout.setRowMinimumHeight(7, 24)
         self._populate()
         self.setWidget(self._content)
 
@@ -1324,11 +1346,11 @@ class PeriodicTableInventoryWidget(QtWidgets.QScrollArea):
             period = element.get("period")
             group = element.get("group")
             if atomic_number in range(57, 72):
-                row = 7
-                col = atomic_number - 57 + 4
-            elif atomic_number in range(89, 104):
                 row = 8
-                col = atomic_number - 89 + 4
+                col = atomic_number - 57 + 2
+            elif atomic_number in range(89, 104):
+                row = 9
+                col = atomic_number - 89 + 2
             elif period and group:
                 row = int(period) - 1
                 col = int(group) - 1
@@ -1338,7 +1360,7 @@ class PeriodicTableInventoryWidget(QtWidgets.QScrollArea):
                 continue
             tile = ElementTileWidget(Element(atomic_number), self._content)
             tile.set_show_atomic_number(True)
-            tile.setMinimumSize(48, 52)
+            tile.setMinimumSize(52, 56)
             tile.element_clicked.connect(self.element_clicked)
             self._layout.addWidget(tile, row, col)
             self._tiles.append(tile)
@@ -1346,7 +1368,7 @@ class PeriodicTableInventoryWidget(QtWidgets.QScrollArea):
 
     def _add_placeholders(self) -> None:
         for row, label in ((5, "57–71"), (6, "89–103")):
-            placeholder = QtWidgets.QLabel(label)
+            placeholder = QtWidgets.QLabel(f"{label} ↓")
             placeholder.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
             placeholder.setObjectName("lanActPlaceholder")
             self._layout.addWidget(placeholder, row, 2)
@@ -1492,14 +1514,43 @@ class CompoundPreviewPane(QtWidgets.QWidget):
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
         self._theme_tokens: dict | None = None
+        self._synonyms_full: list[str] = []
         layout = QtWidgets.QVBoxLayout(self)
         layout.setSpacing(8)
 
         header_layout = QtWidgets.QHBoxLayout()
+        header_stack = QtWidgets.QVBoxLayout()
+        self.title_label = QtWidgets.QLabel("")
+        self.title_label.setWordWrap(True)
+        title_font = self.title_label.font()
+        title_font.setPointSize(title_font.pointSize() + 4)
+        title_font.setBold(True)
+        self.title_label.setFont(title_font)
+        header_stack.addWidget(self.title_label)
+
+        self.formula_label = QtWidgets.QLabel("")
+        self.formula_label.setWordWrap(True)
+        header_stack.addWidget(self.formula_label)
+
+        self.iupac_label = QtWidgets.QLabel("")
+        self.iupac_label.setWordWrap(True)
+        header_stack.addWidget(self.iupac_label)
+
+        synonyms_row = QtWidgets.QHBoxLayout()
+        synonyms_row.setContentsMargins(0, 0, 0, 0)
+        self.synonyms_label = QtWidgets.QLabel("")
+        self.synonyms_label.setWordWrap(True)
+        synonyms_row.addWidget(self.synonyms_label, 1)
+        self.synonyms_copy_button = QtWidgets.QPushButton("Copy")
+        self.synonyms_copy_button.setToolTip("Copy all synonyms")
+        self.synonyms_copy_button.clicked.connect(self._copy_synonyms)
+        synonyms_row.addWidget(self.synonyms_copy_button, 0, QtCore.Qt.AlignmentFlag.AlignTop)
+        header_stack.addLayout(synonyms_row)
+
+        header_layout.addLayout(header_stack, 1)
         self.pubchem_button = QtWidgets.QPushButton("Open PubChem")
         self.pubchem_button.clicked.connect(self._open_pubchem)
-        header_layout.addWidget(self.pubchem_button)
-        header_layout.addStretch()
+        header_layout.addWidget(self.pubchem_button, 0, QtCore.Qt.AlignmentFlag.AlignTop)
         layout.addLayout(header_layout)
 
         top_row = QtWidgets.QHBoxLayout()
@@ -1537,6 +1588,10 @@ class CompoundPreviewPane(QtWidgets.QWidget):
         self._theme_tokens = tokens
         colors = tokens["colors"]
         self.setStyleSheet(f"color: {colors['text']};")
+        self.title_label.setStyleSheet(f"color: {colors['text']};")
+        self.formula_label.setStyleSheet(f"color: {colors['textMuted']};")
+        self.iupac_label.setStyleSheet(f"color: {colors['textMuted']};")
+        self.synonyms_label.setStyleSheet(f"color: {colors['textMuted']};")
         self.structure_widget.apply_theme(tokens)
         self.bonding_widget.apply_theme(tokens)
         self.oxidation_table.apply_theme(tokens)
@@ -1545,14 +1600,26 @@ class CompoundPreviewPane(QtWidgets.QWidget):
     def set_compound(self, compound: dict | None) -> None:
         if not compound:
             self._pubchem_url = None
+            self.title_label.setText("Compound")
+            self.formula_label.setText("")
+            self.iupac_label.setText("")
+            self._synonyms_full = []
+            self._update_synonyms_display()
             self.structure_widget.set_cid(None)
             self.bonding_widget.set_bonding("Bonding: —", "Polarity: —")
             self._populate_table(self.oxidation_table, [])
             self._clear_form_layout(self.properties_left_layout)
             self._clear_form_layout(self.properties_right_layout)
             return
-        raw_name = compound.get("name") or ""
-        name = raw_name.split(";")[0].strip()
+        display = compound_db.format_compound_display(compound)
+        primary = display["primary_name"] or "Compound"
+        iupac = display["iupac_name"]
+        formula_display = display["formula_display"]
+        self.title_label.setText(primary)
+        self.formula_label.setText(f"Formula: {formula_display}" if formula_display else "Formula: —")
+        self.iupac_label.setText(f"IUPAC: {iupac}" if iupac else "IUPAC: —")
+        self._synonyms_full = self._clean_synonyms(display["synonyms"])
+        self._update_synonyms_display()
         self._pubchem_url = compound.get("pubchem_url")
         self.structure_widget.set_cid(compound.get("cid"))
         oxidation_states, heuristic = estimate_oxidation_states(compound)
@@ -1577,9 +1644,6 @@ class CompoundPreviewPane(QtWidgets.QWidget):
         rows = []
         if compound.get("mol_weight"):
             rows.append(("Molecular weight", str(compound["mol_weight"])))
-        if compound.get("iupac_name"):
-            iupac = str(compound["iupac_name"]).split(";")[0].strip()
-            rows.append(("IUPAC name", iupac))
         if compound.get("smiles"):
             rows.append(("SMILES", compound["smiles"]))
         midpoint = (len(rows) + 1) // 2
@@ -1625,6 +1689,58 @@ class CompoundPreviewPane(QtWidgets.QWidget):
     def _open_pubchem(self) -> None:
         if self._pubchem_url:
             QtGui.QDesktopServices.openUrl(QtCore.QUrl(self._pubchem_url))
+
+    def _copy_synonyms(self) -> None:
+        if not self._synonyms_full:
+            return
+        QtWidgets.QApplication.clipboard().setText("; ".join(self._synonyms_full))
+
+    def _update_synonyms_display(self) -> None:
+        if not self._synonyms_full:
+            self.synonyms_label.setText("Also known as: —")
+            self.synonyms_copy_button.setEnabled(False)
+            return
+        display, remaining = self._format_synonyms(self._synonyms_full, max_items=6, max_chars=120)
+        suffix = f" (+{remaining} more)" if remaining > 0 else ""
+        self.synonyms_label.setText(f"Also known as: {display}{suffix}")
+        self.synonyms_copy_button.setEnabled(True)
+
+    @staticmethod
+    def _clean_synonyms(values: list[str] | str) -> list[str]:
+        cleaned: list[str] = []
+        seen = set()
+        if isinstance(values, str):
+            values = [item.strip() for item in values.replace("|", ";").split(";") if item.strip()]
+        for value in values:
+            text = str(value).strip()
+            if not text or len(text) > 80:
+                continue
+            lower = text.lower()
+            if "inchikey" in lower or lower.startswith("inchi=") or lower.startswith("inchi"):
+                continue
+            if lower.startswith("cas ") or lower.startswith("cas-"):
+                continue
+            if not any(ch.isalpha() for ch in text):
+                continue
+            digit_ratio = sum(ch.isdigit() for ch in text) / max(len(text), 1)
+            if digit_ratio > 0.6:
+                continue
+            key = lower
+            if key in seen:
+                continue
+            seen.add(key)
+            cleaned.append(text)
+        return cleaned
+
+    @staticmethod
+    def _format_synonyms(values: list[str], max_items: int = 6, max_chars: int = 120) -> tuple[str, int]:
+        display_list = values[:max_items]
+        display = ", ".join(display_list)
+        truncated = len(values) - len(display_list)
+        if len(display) > max_chars:
+            display = display[: max_chars - 1].rstrip() + "…"
+            truncated = max(truncated, 1)
+        return display, truncated
 
 
 def estimate_oxidation_states(compound: dict) -> tuple[dict[str, int | None], bool]:

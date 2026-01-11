@@ -1,0 +1,134 @@
+QWidget {
+  background: transparent;
+  color: #1a1a1a;
+}
+
+QLabel,
+QGroupBox,
+QAbstractItemView,
+QTabBar,
+QTabWidget::pane,
+QCheckBox,
+QRadioButton {
+  color: #1a1a1a;
+}
+
+QGroupBox::title {
+  color: #1a1a1a;
+}
+
+QWidget:disabled,
+QLabel:disabled,
+QGroupBox:disabled,
+QCheckBox:disabled,
+QRadioButton:disabled,
+QComboBox:disabled,
+QLineEdit:disabled,
+QSpinBox:disabled,
+QDoubleSpinBox:disabled {
+  color: #5f5f5f;
+}
+
+QFrame#minecraftViewportFrame {
+  border: 2px solid #303030;
+  border-top-color: #e0e0e0;
+  border-left-color: #e0e0e0;
+  border-right-color: #5a5a5a;
+  border-bottom-color: #5a5a5a;
+  border-radius: 0;
+  background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
+                              stop: 0 #cfcfcf,
+                              stop: 1 #a8a8a8);
+  padding: 6px;
+}
+
+QPushButton,
+QToolButton {
+  border: 2px solid #303030;
+  border-top-color: #f0f0f0;
+  border-left-color: #f0f0f0;
+  border-right-color: #5a5a5a;
+  border-bottom-color: #5a5a5a;
+  border-radius: 0;
+  background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
+                              stop: 0 #d7d7d7,
+                              stop: 1 #b0b0b0);
+  padding: 4px 8px;
+  color: #1f1f1f;
+}
+
+QPushButton:pressed,
+QToolButton:pressed {
+  background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
+                              stop: 0 #a8a8a8,
+                              stop: 1 #cfcfcf);
+  border-top-color: #5a5a5a;
+  border-left-color: #5a5a5a;
+  border-right-color: #e0e0e0;
+  border-bottom-color: #e0e0e0;
+}
+
+QPushButton:focus,
+QToolButton:focus {
+  border: 2px solid #5a9bd4;
+}
+
+QLineEdit,
+QSpinBox,
+QDoubleSpinBox,
+QComboBox,
+QTextEdit,
+QListWidget,
+QTreeWidget {
+  border: 2px solid #303030;
+  border-top-color: #f0f0f0;
+  border-left-color: #f0f0f0;
+  border-right-color: #5a5a5a;
+  border-bottom-color: #5a5a5a;
+  border-radius: 0;
+  background: #c6c6c6;
+  padding: 4px 6px;
+  color: #1a1a1a;
+}
+
+QLineEdit:focus,
+QSpinBox:focus,
+QDoubleSpinBox:focus,
+QComboBox:focus,
+QTextEdit:focus,
+QListWidget:focus,
+QTreeWidget:focus {
+  border: 2px solid #5a9bd4;
+}
+
+QLineEdit::placeholder,
+QTextEdit::placeholder {
+  color: #4a4a4a;
+}
+
+QComboBox QAbstractItemView {
+  background: #c6c6c6;
+  color: #1a1a1a;
+  border: 2px solid #303030;
+}
+
+QLabel#craftingHeaderLabel,
+QLabel#recipeHeaderLabel,
+QLabel#dataHeaderLabel,
+QLabel#inventoryHeaderLabel,
+QLabel#familyOverviewBox {
+  color: #1f1f1f;
+}
+
+QLabel#familyOverviewBox {
+  border: 2px solid #303030;
+  border-top-color: #e0e0e0;
+  border-left-color: #e0e0e0;
+  border-right-color: #5a5a5a;
+  border-bottom-color: #5a5a5a;
+  border-radius: 0;
+  background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
+                              stop: 0 #cfcfcf,
+                              stop: 1 #a8a8a8);
+  padding: 6px;
+}
