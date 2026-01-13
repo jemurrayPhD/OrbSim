@@ -1,0 +1,166 @@
+{
+  "H": {
+    "title": "Hydrogen",
+    "summary": "Hydrogen is the lightest element and is usually found as diatomic H2 gas. It is central to acids, bases, and water chemistry.",
+    "properties": [
+      "Nonmetal; colorless, odorless gas at room temperature.",
+      "Single valence electron enables covalent bonding and +1 oxidation states.",
+      "Very low density and high diffusivity."
+    ],
+    "applications": [
+      "Feedstock for ammonia production and petroleum refining.",
+      "Used in fuel cells to generate electricity with water as the main byproduct."
+    ],
+    "safety": "Hydrogen gas is highly flammable; avoid ignition sources and provide ventilation.",
+    "links": [
+      {
+        "label": "RSC",
+        "url": "https://www.rsc.org/periodic-table/element/1/hydrogen"
+      },
+      {
+        "label": "Britannica",
+        "url": "https://www.britannica.com/science/hydrogen"
+      }
+    ]
+  },
+  "C": {
+    "title": "Carbon",
+    "summary": "Carbon forms the backbone of organic chemistry and can bond in long chains and rings.",
+    "properties": [
+      "Nonmetal with four valence electrons.",
+      "Forms strong covalent bonds and multiple allotropes (graphite, diamond).",
+      "Moderate electronegativity supports diverse bonding patterns."
+    ],
+    "applications": [
+      "Essential in biological molecules and polymer materials.",
+      "Graphite is used in electrodes; diamond is used in cutting tools."
+    ],
+    "links": [
+      {
+        "label": "RSC",
+        "url": "https://www.rsc.org/periodic-table/element/6/carbon"
+      },
+      {
+        "label": "Britannica",
+        "url": "https://www.britannica.com/science/carbon-chemical-element"
+      }
+    ]
+  },
+  "O": {
+    "title": "Oxygen",
+    "summary": "Oxygen is a reactive nonmetal that supports combustion and is essential for aerobic life.",
+    "properties": [
+      "Nonmetal with six valence electrons.",
+      "Common oxidation state is -2 in oxides and many ionic compounds.",
+      "Diatomic gas under standard conditions."
+    ],
+    "applications": [
+      "Medical oxygen therapy and life support systems.",
+      "Industrial oxidizer for steelmaking and chemical synthesis."
+    ],
+    "links": [
+      {
+        "label": "RSC",
+        "url": "https://www.rsc.org/periodic-table/element/8/oxygen"
+      },
+      {
+        "label": "Britannica",
+        "url": "https://www.britannica.com/science/oxygen"
+      }
+    ]
+  },
+  "Na": {
+    "title": "Sodium",
+    "summary": "Sodium is a soft alkali metal that reacts readily with water and forms +1 ions.",
+    "properties": [
+      "Alkali metal with one valence electron.",
+      "Highly reactive and stored under oil to prevent oxidation.",
+      "Forms ionic compounds such as sodium chloride."
+    ],
+    "applications": [
+      "Used in sodium-vapor lamps and as a heat-transfer medium in some reactors.",
+      "Sodium ions are essential for nerve signaling in biology."
+    ],
+    "safety": "Reacts violently with water; handle with dry equipment and inert storage.",
+    "links": [
+      {
+        "label": "RSC",
+        "url": "https://www.rsc.org/periodic-table/element/11/sodium"
+      },
+      {
+        "label": "LibreTexts",
+        "url": "https://chem.libretexts.org/Bookshelves/General_Chemistry/Map%3A_Chemistry_(OpenStax)/08%3A_Periodic_Properties_of_the_Elements/8.3%3A_Group_1A_The_Alkali_Metals"
+      }
+    ]
+  },
+  "Cl": {
+    "title": "Chlorine",
+    "summary": "Chlorine is a reactive halogen that commonly forms -1 ions in salts.",
+    "properties": [
+      "Halogen with seven valence electrons.",
+      "Diatomic gas with a strong oxidizing character.",
+      "Commonly found as chloride in seawater and minerals."
+    ],
+    "applications": [
+      "Disinfection of drinking water and swimming pools.",
+      "Manufacture of PVC and other chlorinated materials."
+    ],
+    "safety": "Chlorine gas is toxic and corrosive; use proper ventilation and protective gear.",
+    "links": [
+      {
+        "label": "RSC",
+        "url": "https://www.rsc.org/periodic-table/element/17/chlorine"
+      },
+      {
+        "label": "Britannica",
+        "url": "https://www.britannica.com/science/chlorine"
+      }
+    ]
+  },
+  "Si": {
+    "title": "Silicon",
+    "summary": "Silicon is a metalloid with semiconducting behavior that powers modern electronics.",
+    "properties": [
+      "Metalloid with four valence electrons.",
+      "Forms a tetrahedral network in crystalline silicon.",
+      "Oxidizes to SiO2, a major component of sand and glass."
+    ],
+    "applications": [
+      "Semiconductor wafers for integrated circuits and solar cells.",
+      "Silica is used in glass, ceramics, and concrete."
+    ],
+    "links": [
+      {
+        "label": "RSC",
+        "url": "https://www.rsc.org/periodic-table/element/14/silicon"
+      },
+      {
+        "label": "Britannica",
+        "url": "https://www.britannica.com/science/silicon"
+      }
+    ]
+  },
+  "Fe": {
+    "title": "Iron",
+    "summary": "Iron is a transition metal with variable oxidation states and strong magnetic behavior.",
+    "properties": [
+      "Common oxidation states include +2 and +3.",
+      "Partially filled d subshell enables complex formation and magnetism.",
+      "Forms alloys such as steel with enhanced strength."
+    ],
+    "applications": [
+      "Structural steel for buildings, bridges, and tools.",
+      "Iron oxides are used as pigments and in magnetic materials."
+    ],
+    "links": [
+      {
+        "label": "RSC",
+        "url": "https://www.rsc.org/periodic-table/element/26/iron"
+      },
+      {
+        "label": "Britannica",
+        "url": "https://www.britannica.com/science/iron-chemical-element"
+      }
+    ]
+  }
+}

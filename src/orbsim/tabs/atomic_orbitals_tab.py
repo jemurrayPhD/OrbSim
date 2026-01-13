@@ -343,6 +343,14 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         self._auto_volume_fallback_attempted = False
         self._volume_status_timer: QtCore.QTimer | None = None
         self._volume_bounds: tuple[float, float, float, float, float, float] | None = None
+        self._volume_actor = None
+        self._volume_scalar_range: tuple[float, float] | None = None
+        self._volume_opacity_points = 0
+        self._volume_force_cpu = False
+        self._volume_render_failed = False
+        self._volume_mapper_supported = True
+        self._volume_error_messages: list[str] = []
+        self._volume_debug_enabled_flag = bool(os.environ.get("ORBSIM_VOLUME_DEBUG"))
         self.clip_invert = False
         self.controls = self._build_controls()
         self._set_slice_normal(self.slice_normal, update_controls=True, trigger_render=False)
@@ -405,8 +413,70 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         except Exception:
             pass
 
-    def _prepare_volume_scalars(self, dataset, prob_arr: np.ndarray) -> np.ndarray:
+    def _volume_debug_enabled(self) -> bool:
+        return bool(getattr(self, "_volume_debug_enabled_flag", False))
+
+    def _volume_debug(self, message: str, *args) -> None:
+        if not self._volume_debug_enabled():
+            return
         logger = logging.getLogger(__name__)
+        logger.debug(message, *args)
+
+    def _reset_volume_error_state(self) -> None:
+        self._volume_render_failed = False
+        self._volume_mapper_supported = True
+        self._volume_error_messages = []
+
+    def _on_volume_vtk_message(self, _obj, event: str, message: str | None = None) -> None:
+        text = str(message or "").strip()
+        if event == "ErrorEvent":
+            self._volume_render_failed = True
+        if text and len(self._volume_error_messages) < 6:
+            self._volume_error_messages.append(f"{event}: {text}")
+        if text:
+            self._volume_debug("VTK %s: %s", event, text)
+
+    def _install_vtk_error_observer(self, obj) -> None:
+        if not obj:
+            return
+        try:
+            obj.AddObserver("ErrorEvent", self._on_volume_vtk_message)
+            obj.AddObserver("WarningEvent", self._on_volume_vtk_message)
+        except Exception:
+            pass
+
+    def _volume_mapper_is_supported(self, mapper, volume) -> bool:
+        try:
+            if hasattr(mapper, "IsRenderSupported"):
+                return bool(mapper.IsRenderSupported(self.plotter.renderer, volume))
+        except Exception:
+            return True
+        return True
+
+    def _should_fallback_to_cpu(self) -> bool:
+        if self._volume_render_failed or not self._volume_mapper_supported:
+            return True
+        if self._volume_error_messages:
+            return True
+        return self._volume_render_seems_blank()
+
+    def _handle_auto_volume_fallback(self, rerender_fn) -> None:
+        if self.volume_renderer_mode != "auto":
+            return
+        if self._volume_force_cpu:
+            return
+        if self._last_volume_mapper_mode != "gpu":
+            return
+        if not self._should_fallback_to_cpu():
+            return
+        if self._volume_error_messages:
+            self._volume_debug("Volume render errors: %s", self._volume_error_messages)
+        self._volume_force_cpu = True
+        self._auto_volume_fallback_attempted = True
+        self._show_volume_status("GPU volume rendering unavailable; using CPU compatibility mode.")
+        rerender_fn()
+
+    def _prepare_volume_scalars(self, dataset, prob_arr: np.ndarray) -> np.ndarray:
         prob_arr = np.asarray(prob_arr)
         if prob_arr.size == 0:
             return np.array([], dtype=np.float32)
@@ -437,7 +507,7 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
                     point_data.SetScalars(scalars)
         except Exception:
             pass
-        logger.debug(
+        self._volume_debug(
             "Volume scalars: raw dtype=%s range=(%.4g, %.4g) p1/p50/p99=(%.4g, %.4g, %.4g) nan=%d "
             "render dtype=%s range=(%.4g, %.4g)",
             prob_raw.dtype,
@@ -456,9 +526,11 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
     def _log_volume_bounds(self) -> None:
         if not self._volume_bounds:
             return
-        logger = logging.getLogger(__name__)
         bounds = self._volume_bounds
-        logger.debug("Volume bounds: %s", bounds)
+        if not self._volume_debug_enabled():
+            return
+        logger = logging.getLogger(__name__)
+        self._volume_debug("Volume bounds: %s", bounds)
         try:
             ranges = (bounds[1] - bounds[0], bounds[3] - bounds[2], bounds[5] - bounds[4])
             if any(r <= 0 for r in ranges):
@@ -574,9 +646,9 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         self.m_spin.valueChanged.connect(self._set_m)
         quantum_layout.addRow("m (magnetic)", self.m_spin)
 
+        layout.addWidget(quantum_group)
         layout.addWidget(three_d_group)
         layout.addWidget(clip_group)
-        layout.addWidget(quantum_group)
 
         # 2D controls (non-collapsible)
         two_d_group = QtWidgets.QGroupBox("2D Slice")
@@ -754,6 +826,8 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         data = self.volume_renderer_combo.currentData()
         if data:
             self.volume_renderer_mode = str(data)
+        if self.volume_renderer_mode in ("cpu", "gpu"):
+            self._volume_force_cpu = False
         self._auto_volume_fallback_attempted = False
         self._render_orbital()
 
@@ -773,18 +847,51 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         self._volume_status_timer.start(timeout_ms)
 
     def _volume_render_seems_blank(self) -> bool:
+        if self._volume_actor is None:
+            return True
+        if self._volume_opacity_points < 2:
+            return True
+        if self._volume_scalar_range and self._volume_scalar_range[1] <= self._volume_scalar_range[0] + 1e-9:
+            return True
         try:
+            volumes = self.plotter.renderer.GetVolumes()
+            if volumes and volumes.GetNumberOfItems() == 0:
+                return True
+        except Exception:
+            pass
+        try:
+            try:
+                self.plotter.render()
+                self.plotter.render()
+            except Exception:
+                pass
             frame = self.plotter.screenshot(return_img=True)
             if frame is None:
-                return False
+                return True
             arr = np.asarray(frame)
             if arr.size == 0:
-                return False
-            if arr.ndim >= 3:
+                return True
+            if arr.ndim < 3:
+                return True
+            alpha = None
+            if arr.shape[-1] == 4:
+                alpha = arr[..., 3]
                 arr = arr[..., :3]
-            return float(np.std(arr)) < 1.0
+            rgb = arr.astype(np.float32)
+            if alpha is not None:
+                if float(np.mean(alpha > 0)) < 0.01:
+                    return True
+            try:
+                bg = self.plotter.renderer.GetBackground()
+            except Exception:
+                bg = (0.0, 0.0, 0.0)
+            bg_rgb = np.array(bg, dtype=np.float32) * 255.0
+            diff = np.linalg.norm(rgb - bg_rgb, axis=2)
+            non_bg = float(np.mean(diff > 2.0))
+            std = float(np.std(rgb))
+            return std < 1.0 and non_bg < 0.01
         except Exception:
-            return False
+            return True
 
     def _set_slice_vmin(self, value: float) -> None:
         self.slice_vmin = None if value == 0 and self.slice_vmin_spin.specialValueText() else value
@@ -1093,15 +1200,7 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
             except Exception as exc:
                 print(f"Render error: {exc}", file=sys.stderr)
         if self.volume_renderer_mode == "auto" and not self._auto_volume_fallback_attempted:
-            if self._last_volume_mapper_mode == "gpu" and self._volume_render_seems_blank():
-                self._auto_volume_fallback_attempted = True
-                self.volume_renderer_mode = "cpu"
-                if self.volume_renderer_combo:
-                    self.volume_renderer_combo.blockSignals(True)
-                    self.volume_renderer_combo.setCurrentIndex(2)
-                    self.volume_renderer_combo.blockSignals(False)
-                self._show_volume_status("Switched to CPU volume renderer for compatibility.")
-                self._render_orbital()
+            self._handle_auto_volume_fallback(lambda: self._render_orbital())
         try:
             self.slice_view.render()
         except Exception:
@@ -1233,22 +1332,42 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
 
     def _build_opacity_transfer(self, values: np.ndarray, vmin: float, vmax: float) -> vtk.vtkPiecewiseFunction:
         opacity_tf = vtk.vtkPiecewiseFunction()
+        if vmax <= vmin:
+            vmax = vmin + 1e-6
         if values.size == 0:
             opacity_tf.AddPoint(vmin, 0.0)
             opacity_tf.AddPoint(vmax, min(1.0, self.opacity_scale))
             return opacity_tf
-        low_val = float(self.opacity_low)
-        high_val = float(self.opacity_high)
-        low_val = min(max(low_val, 0.0), 1.0)
-        high_val = min(max(high_val, 0.0), 1.0)
+
+        low_frac = float(self.opacity_low)
+        high_frac = float(self.opacity_high)
+        low_frac = min(max(low_frac, 0.0), 1.0)
+        high_frac = min(max(high_frac, 0.0), 1.0)
+        if high_frac <= low_frac:
+            high_frac = min(1.0, low_frac + 0.05)
+
+        span = max(vmax - vmin, 1e-6)
+        low_val = vmin + span * low_frac
+        high_val = vmin + span * high_frac
         if high_val <= low_val:
-            high_val = min(1.0, low_val + 0.05)
-        mid_val = max(low_val + 0.05, 0.15)
-        opacity_tf.AddPoint(0.0, 0.0)
-        opacity_tf.AddPoint(low_val, 0.0)
-        opacity_tf.AddPoint(mid_val, min(1.0, 0.2 * self.opacity_scale))
-        opacity_tf.AddPoint(0.6, min(1.0, 0.6 * self.opacity_scale))
-        opacity_tf.AddPoint(1.0, min(1.0, 0.9 * self.opacity_scale))
+            high_val = min(vmax, low_val + span * 0.05)
+
+        if low_val <= vmin + 1e-9:
+            low_val = min(vmax, vmin + span * 0.02)
+        mid_val = low_val + (high_val - low_val) * 0.4
+        if mid_val <= low_val:
+            mid_val = min(vmax, low_val + span * 0.1)
+
+        base_opacity = min(1.0, 0.08 * self.opacity_scale)
+        mid_opacity = min(1.0, 0.35 * self.opacity_scale)
+        high_opacity = min(1.0, 0.75 * self.opacity_scale)
+        max_opacity = min(1.0, 0.95 * self.opacity_scale)
+
+        opacity_tf.AddPoint(vmin, 0.0)
+        opacity_tf.AddPoint(low_val, base_opacity)
+        opacity_tf.AddPoint(mid_val, mid_opacity)
+        opacity_tf.AddPoint(high_val, high_opacity)
+        opacity_tf.AddPoint(vmax, max_opacity)
         return opacity_tf
 
     def _build_clipping_planes(self) -> list[vtk.vtkPlane]:
@@ -1274,6 +1393,10 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
 
     def _add_volume_render(self, volume_field, values: np.ndarray) -> None:
         dataset = volume_field.dataset
+        self._volume_actor = None
+        self._volume_scalar_range = None
+        self._volume_opacity_points = 0
+        self._reset_volume_error_state()
         if "density_render" in dataset.array_names:
             try:
                 dataset.set_active_scalars("density_render")
@@ -1283,19 +1406,32 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         vmax = float(np.nanmax(values)) if values.size else 1.0
         if vmax <= vmin:
             vmax = vmin + 1e-6
+        spacing = None
+        unit_distance = 1.0
+        try:
+            spacing = tuple(float(val) for val in dataset.spacing)
+            spacing_vals = np.array(spacing, dtype=float)
+            spacing_vals = np.where(spacing_vals <= 0, np.nan, spacing_vals)
+            if np.isfinite(spacing_vals).any():
+                unit_distance = float(np.nanmean(spacing_vals))
+        except Exception:
+            spacing = None
+        unit_distance = max(unit_distance, 1e-3)
         mapper = None
         planes = self._build_clipping_planes()
-        color_tf = self._build_color_transfer(self.current_cmap, 0.0, 1.0)
-        opacity_tf = self._build_opacity_transfer(values, 0.0, 1.0)
-        color_tf.SetRange(0.0, 1.0)
+        color_tf = self._build_color_transfer(self.current_cmap, vmin, vmax)
+        opacity_tf = self._build_opacity_transfer(values, vmin, vmax)
+        color_tf.SetRange(vmin, vmax)
         prop = vtk.vtkVolumeProperty()
         prop.SetColor(color_tf)
         prop.SetScalarOpacity(opacity_tf)
         prop.SetInterpolationTypeToLinear()
-        prop.ShadeOn()
+        prop.SetScalarOpacityUnitDistance(unit_distance)
+        prop.ShadeOff()
         volume = vtk.vtkVolume()
         mapper_mode = self.volume_renderer_mode
-        chosen_mode = "gpu" if mapper_mode in ("auto", "gpu") else "cpu"
+        force_cpu = mapper_mode == "auto" and self._volume_force_cpu
+        chosen_mode = "gpu" if mapper_mode in ("auto", "gpu") and not force_cpu else "cpu"
         if chosen_mode == "cpu":
             mapper = vtk.vtkFixedPointVolumeRayCastMapper()
             mapper.SetInputData(dataset)
@@ -1305,6 +1441,7 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
             mapper.SetBlendModeToComposite()
             if mapper_mode == "gpu" and hasattr(mapper, "SetRequestedRenderModeToGPU"):
                 mapper.SetRequestedRenderModeToGPU()
+        self._install_vtk_error_observer(mapper)
         if planes:
             if hasattr(mapper, "RemoveAllClippingPlanes"):
                 mapper.RemoveAllClippingPlanes()
@@ -1318,8 +1455,41 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
                 mapper.SetClippingPlanes(plane_collection)
         volume.SetMapper(mapper)
         volume.SetProperty(prop)
+        self._volume_mapper_supported = self._volume_mapper_is_supported(mapper, volume)
         self.plotter.renderer.AddVolume(volume)
         self._last_volume_mapper_mode = chosen_mode
+        self._volume_actor = volume
+        self._volume_scalar_range = (vmin, vmax)
+        try:
+            self._volume_opacity_points = int(opacity_tf.GetSize())
+        except Exception:
+            self._volume_opacity_points = 0
+        active_name = None
+        has_scalars = False
+        try:
+            active_name = dataset.active_scalars_name
+        except Exception:
+            pass
+        try:
+            point_data = dataset.GetPointData()
+            has_scalars = bool(point_data and point_data.GetScalars())
+        except Exception:
+            has_scalars = False
+        self._volume_debug(
+            "Volume render: spacing=%s unit_distance=%.4g active_scalars=%s has_scalars=%s range=(%.4g, %.4g) "
+            "mapper=%s supported=%s opacity_points=%d shade=%s errors=%d",
+            spacing,
+            unit_distance,
+            active_name,
+            has_scalars,
+            vmin,
+            vmax,
+            chosen_mode,
+            self._volume_mapper_supported,
+            self._volume_opacity_points,
+            False,
+            len(self._volume_error_messages),
+        )
         try:
             self._volume_bounds = volume.GetBounds()
         except Exception:
@@ -1691,6 +1861,18 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
         self._scale_bar_points = points
         self._scale_bar_poly = poly
 
+    def _ensure_scale_bar_text_actor(self) -> None:
+        if self._scale_bar_text is not None:
+            return
+        text_actor = vtk.vtkTextActor()
+        text_actor.SetInput("")
+        prop = text_actor.GetTextProperty()
+        prop.SetFontSize(10)
+        prop.SetJustificationToLeft()
+        prop.SetVerticalJustificationToBottom()
+        self.slice_view.renderer.AddActor2D(text_actor)
+        self._scale_bar_text = text_actor
+
     def _draw_slice_scalebar(self, bounds: tuple[float, float, float, float, float, float] | None = None) -> None:
         if bounds is None:
             bounds = self._last_slice_bounds
@@ -1698,6 +1880,7 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
             return
         try:
             self._ensure_scale_bar_actor()
+            self._ensure_scale_bar_text_actor()
             render_window = getattr(self.slice_view, "render_window", None)
             if render_window:
                 width_px, height_px = render_window.GetSize()
@@ -1724,19 +1907,11 @@ class AtomicOrbitalsTab(QtWidgets.QWidget):
             color = QtGui.QColor(self._text_color)
             self._scale_bar_actor_2d.GetProperty().SetColor(color.redF(), color.greenF(), color.blueF())
             if self._scale_bar_text:
-                try:
-                    self.slice_view.remove_actor(self._scale_bar_text)
-                except Exception:
-                    pass
-            self._scale_bar_text = self.slice_view.add_text(
-                f"{scalebar_length:.2f} A",
-                position="lower_left",
-                font_size=10,
-                color=self._text_color,
-                shadow=self._text_shadow,
-                name="scale_bar",
-            )
-            self._apply_text_backdrop(self._scale_bar_text)
+                self._scale_bar_text.SetInput(f"{scalebar_length:.2f} A")
+                self._scale_bar_text.SetPosition(start_x, start_y + 6)
+                prop = self._scale_bar_text.GetTextProperty()
+                prop.SetColor(color.redF(), color.greenF(), color.blueF())
+                self._apply_text_backdrop(self._scale_bar_text)
         except Exception as exc:
             print(f"Scalebar render error: {exc}", file=sys.stderr)
 

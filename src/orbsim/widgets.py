@@ -10,9 +10,14 @@ from PySide6 import QtCore, QtGui, QtNetwork, QtWidgets
 from pyvistaqt import QtInteractor
 
 from orbsim.chem.elements import get_atomic_number, get_element, get_name, get_symbol
+from orbsim.chem.formula_format import format_formula_from_string
+from orbsim.content.compound_properties import describe_bonding_and_polarity
+from orbsim import pedagogy
 from orbsim.theming.theme_manager import get_theme_manager
 from orbsim.chem import compound_db
 from orbsim.resources import load_icon
+from orbsim.audio import play_click_sound
+from orbsim.ui.expandable_text import ExpandableTextPopup
 
 @dataclass(frozen=True)
 class Element:
@@ -807,6 +812,7 @@ class CraftingTableSlotWidget(QtWidgets.QFrame):
         self.setSizePolicy(QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed)
         self.setAcceptDrops(True)
         self.setObjectName("craftingTableSlot")
+        self.setProperty("dropActive", False)
         self._theme_tokens: dict | None = None
         self.atomic_number: int | None = None
         self.count = 0
@@ -867,6 +873,11 @@ class CraftingTableSlotWidget(QtWidgets.QFrame):
             f"border: 1px solid {colors['border']};"
             f"border-radius: {radii['sm']}px;"
             "}"
+            "QFrame#craftingTableSlot[dropActive=\"true\"] {"
+            f"background: {colors['surface']};"
+            f"border: 2px dashed {colors['focusRing']};"
+            f"border-radius: {radii['sm']}px;"
+            "}"
             "QFrame#craftingTableSlot:focus {"
             f"outline: 2px solid {colors['focusRing']};"
             "}"
@@ -891,6 +902,10 @@ class CraftingTableSlotWidget(QtWidgets.QFrame):
         for button in (self.add_button, self.sub_button, self.clear_button):
             button.setIconSize(QtCore.QSize(icon_size, icon_size))
             button.setFixedSize(button_size, button_size)
+
+    def _set_drop_active(self, active: bool) -> None:
+        self.setProperty("dropActive", active)
+        self.style().polish(self)
 
     def set_element(self, atomic_number: int, count: int = 1) -> None:
         self.atomic_number = atomic_number
@@ -938,13 +953,19 @@ class CraftingTableSlotWidget(QtWidgets.QFrame):
 
     def dragEnterEvent(self, event: QtGui.QDragEnterEvent) -> None:
         if event.mimeData().hasFormat("application/x-orbsim-element"):
+            self._set_drop_active(True)
             event.acceptProposedAction()
         else:
             event.ignore()
 
+    def dragLeaveEvent(self, event: QtGui.QDragLeaveEvent) -> None:
+        self._set_drop_active(False)
+        super().dragLeaveEvent(event)
+
     def dropEvent(self, event: QtGui.QDropEvent) -> None:
         element = _element_from_mime(event.mimeData())
         if not element:
+            self._set_drop_active(False)
             event.ignore()
             return
         if self.atomic_number is None:
@@ -953,6 +974,8 @@ class CraftingTableSlotWidget(QtWidgets.QFrame):
             self._increment()
         else:
             self.set_element(element.atomic_number, 1)
+        self._set_drop_active(False)
+        play_click_sound()
         event.acceptProposedAction()
 
 
@@ -963,7 +986,7 @@ class CraftingTableWidget(QtWidgets.QWidget):
         super().__init__(parent)
         self._theme_tokens: dict | None = None
         self.setObjectName("craftingTable")
-        self.setAcceptDrops(True)
+        self.setAcceptDrops(False)
         layout = QtWidgets.QGridLayout(self)
         layout.setSpacing(8)
         layout.setContentsMargins(4, 4, 4, 4)
@@ -1032,18 +1055,10 @@ class CraftingTableWidget(QtWidgets.QWidget):
         self._emit_change()
 
     def dragEnterEvent(self, event: QtGui.QDragEnterEvent) -> None:
-        if event.mimeData().hasFormat("application/x-orbsim-element"):
-            event.acceptProposedAction()
-        else:
-            event.ignore()
+        event.ignore()
 
     def dropEvent(self, event: QtGui.QDropEvent) -> None:
-        element = _element_from_mime(event.mimeData())
-        if not element:
-            event.ignore()
-            return
-        self.add_element_to_first_empty(element.atomic_number)
-        event.acceptProposedAction()
+        event.ignore()
 
     def _emit_change(self) -> None:
         payload = {"counts": self.counts(), "slots": self.slots_state()}
@@ -1461,9 +1476,9 @@ class BondingAndPolarityWidget(QtWidgets.QWidget):
         super().__init__(parent)
         self._theme_tokens: dict | None = None
         layout = QtWidgets.QVBoxLayout(self)
-        self.bonding_label = QtWidgets.QLabel("Bonding: —")
+        self.bonding_label = QtWidgets.QLabel("")
         self.bonding_label.setWordWrap(True)
-        self.polarity_label = QtWidgets.QLabel("Polarity: —")
+        self.polarity_label = QtWidgets.QLabel("")
         self.polarity_label.setWordWrap(True)
         layout.addWidget(self.bonding_label)
         layout.addWidget(self.polarity_label)
@@ -1530,6 +1545,7 @@ class CompoundPreviewPane(QtWidgets.QWidget):
 
         self.formula_label = QtWidgets.QLabel("")
         self.formula_label.setWordWrap(True)
+        self.formula_label.setTextFormat(QtCore.Qt.TextFormat.RichText)
         header_stack.addWidget(self.formula_label)
 
         self.iupac_label = QtWidgets.QLabel("")
@@ -1582,6 +1598,18 @@ class CompoundPreviewPane(QtWidgets.QWidget):
         properties_layout.addWidget(self.properties_right)
         layout.addWidget(self.properties_container)
 
+        self.pedagogy_browser = QtWidgets.QTextBrowser(self)
+        self.pedagogy_browser.setObjectName("compoundPedagogy")
+        self.pedagogy_browser.setOpenExternalLinks(True)
+        self.pedagogy_browser.setFrameShape(QtWidgets.QFrame.NoFrame)
+        self.pedagogy_browser.setMinimumHeight(140)
+        layout.addWidget(self.pedagogy_browser)
+        self._pedagogy_expander = ExpandableTextPopup(
+            self.pedagogy_browser,
+            anchor=self.pedagogy_browser,
+            frame_style_source=self.pedagogy_browser,
+        )
+
         self._pubchem_url: str | None = None
 
     def apply_theme(self, tokens: dict) -> None:
@@ -1596,6 +1624,10 @@ class CompoundPreviewPane(QtWidgets.QWidget):
         self.bonding_widget.apply_theme(tokens)
         self.oxidation_table.apply_theme(tokens)
         self._apply_properties_theme(tokens)
+        self.pedagogy_browser.setStyleSheet(
+            f"background: {colors['surfaceAlt']}; border: 1px solid {colors['border']};"
+            f"padding: {tokens['spacing']['xs']}px; color: {colors['text']};"
+        )
 
     def set_compound(self, compound: dict | None) -> None:
         if not compound:
@@ -1606,17 +1638,23 @@ class CompoundPreviewPane(QtWidgets.QWidget):
             self._synonyms_full = []
             self._update_synonyms_display()
             self.structure_widget.set_cid(None)
-            self.bonding_widget.set_bonding("Bonding: —", "Polarity: —")
+            summary = describe_bonding_and_polarity({})
+            self.bonding_widget.set_bonding(summary.bonding_sentence, summary.polarity_sentence)
             self._populate_table(self.oxidation_table, [])
             self._clear_form_layout(self.properties_left_layout)
             self._clear_form_layout(self.properties_right_layout)
+            self.pedagogy_browser.setHtml("")
             return
         display = compound_db.format_compound_display(compound)
         primary = display["primary_name"] or "Compound"
         iupac = display["iupac_name"]
         formula_display = display["formula_display"]
         self.title_label.setText(primary)
-        self.formula_label.setText(f"Formula: {formula_display}" if formula_display else "Formula: —")
+        if formula_display:
+            formatted = format_formula_from_string(formula_display)
+            self.formula_label.setText(f"Formula: {formatted.rich}")
+        else:
+            self.formula_label.setText("Formula: —")
         self.iupac_label.setText(f"IUPAC: {iupac}" if iupac else "IUPAC: —")
         self._synonyms_full = self._clean_synonyms(display["synonyms"])
         self._update_synonyms_display()
@@ -1631,6 +1669,7 @@ class CompoundPreviewPane(QtWidgets.QWidget):
         bonding_text, polarity_text = classify_bonding_and_polarity(compound)
         self.bonding_widget.set_bonding(bonding_text, polarity_text)
         self._populate_properties(compound)
+        self.pedagogy_browser.setHtml(pedagogy.compound_notes_html(compound.get("formula") or ""))
 
     def _populate_oxidation_table(self, elements: dict, oxidation_states: dict[str, int | None]) -> None:
         rows = []
@@ -1776,46 +1815,8 @@ def estimate_oxidation_states(compound: dict) -> tuple[dict[str, int | None], bo
 
 
 def classify_bonding_and_polarity(compound: dict) -> tuple[str, str]:
-    elements = compound.get("elements", {})
-    symbols = [get_symbol(int(z)) for z in elements.keys()]
-    symbols = [s for s in symbols if s]
-    if not symbols:
-        return "Bonding: Unknown", "Polarity: Unknown"
-    has_metal = any(_is_metal_symbol(symbol) for symbol in symbols)
-    has_nonmetal = any(_is_nonmetal_symbol(symbol) for symbol in symbols)
-
-    if has_metal and has_nonmetal:
-        bonding = "Bonding: Ionic (heuristic). This compound pairs metal and nonmetal species."
-    elif has_metal and not has_nonmetal:
-        bonding = "Bonding: Metallic (heuristic). The compound is dominated by metallic elements."
-    else:
-        bonding = "Bonding: Covalent (heuristic). The compound is primarily nonmetals sharing electrons."
-
-    en_values = [value for symbol in symbols if (value := _electronegativity_symbol(symbol)) is not None]
-    if not en_values:
-        return bonding, "Polarity: Unknown"
-    max_en = max(en_values)
-    min_en = min(en_values)
-    delta_en = max_en - min_en
-    asymmetry = 0.0
-    if len(symbols) == 1:
-        asymmetry = 0.0
-    elif len(symbols) == 2 and elements.get(list(elements.keys())[0], 0) == 1 and elements.get(list(elements.keys())[1], 0) == 1:
-        asymmetry = 1.0
-    else:
-        asymmetry = 0.5
-    nea = delta_en * asymmetry
-    if nea < 0.4:
-        category = "Nonpolar"
-    elif nea < 1.0:
-        category = "Moderately polar"
-    else:
-        category = "Strongly polar"
-    polarity = (
-        f"Polarity estimate: NEA = {nea:.2f} (Δχ max {delta_en:.2f}, asymmetry {asymmetry:.2f}). "
-        f"Category: {category}. This is an estimated metric based on electronegativity and symmetry heuristics."
-    )
-    return bonding, polarity
+    summary = describe_bonding_and_polarity(compound)
+    return summary.bonding_sentence, summary.polarity_sentence
 
 
 class CollapsibleGroup(QtWidgets.QGroupBox):

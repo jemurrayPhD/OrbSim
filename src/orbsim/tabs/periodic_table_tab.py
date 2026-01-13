@@ -8,8 +8,11 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from pint import UnitRegistry
 
 from orbsim.colorbar_widget import HorizontalColorbarWidget
+from orbsim.content.family_overview import family_overview_html
+from orbsim.pedagogy import SECTION_LABELS, element_notes_html
 from orbsim.tabs.shared import resolve_cmap
 from orbsim.ui.generated.ui_periodic_table import Ui_PeriodicTableTab
+from orbsim.ui.expandable_text import ExpandableTextPopup
 from orbsim.views.periodic_table_view import (
     BohrViewer,
     ElementTileButton,
@@ -51,19 +54,6 @@ class PeriodicTableTab(QtWidgets.QWidget):
         "lanthanide": "Lanthanide",
         "actinide": "Actinide",
     }
-    FAMILY_SUMMARY = {
-        "Noble Gas": "Closed-shell, monatomic gases; extremely low reactivity, colorless/odorless with very low boiling points.",
-        "Alkali Metal": "Soft, highly reactive metals; form +1 cations and vigorous reactions with water; low ionization energy.",
-        "Alkaline Earth Metal": "Reactive metals forming +2 cations; higher melting points than alkali metals and common oxides/carbonates.",
-        "Transition Metal": "Variable oxidation states with partially filled d-subshells; often colored compounds and useful catalysts.",
-        "Post-Transition Metal": "Softer, lower-melting metals with mixed metallic/covalent character; form diverse alloys and compounds.",
-        "Metalloid": "Intermediate metallic/nonmetallic properties; semiconducting behavior common (e.g., Si, Ge).",
-        "Nonmetal": "Generally poor electrical/thermal conductors; form covalent bonds and molecular compounds; wide range of states.",
-        "Halogen": "Very reactive nonmetals forming -1 anions; strong oxidizers; exist as diatomic molecules at STP.",
-        "Lanthanide": "Rare-earth metals with filling 4f subshell; typically +3 oxidation, magnetic/optical specialty uses.",
-        "Actinide": "5f-block metals; radioactive, multiple oxidation states; many are synthetic with complex chemistry.",
-    }
-
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
         self.ui = Ui_PeriodicTableTab()
@@ -201,10 +191,23 @@ class PeriodicTableTab(QtWidgets.QWidget):
         self.info.setMinimumWidth(360)
         self.info.anchorClicked.connect(self._handle_info_link)
         right.addWidget(self.info, 2)
+        self._info_expander = ExpandableTextPopup(
+            self.info,
+            anchor=self.info,
+            frame_style_source=self.info,
+            link_handler=self._handle_info_link,
+        )
         self.family_overview_box = QtWidgets.QLabel()
         self.family_overview_box.setWordWrap(True)
+        self.family_overview_box.setTextFormat(QtCore.Qt.TextFormat.RichText)
+        self.family_overview_box.setOpenExternalLinks(True)
+        self.family_overview_box.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop | QtCore.Qt.AlignmentFlag.AlignLeft)
         self.family_overview_box.setObjectName("familyOverviewBox")
-        right.addWidget(self.family_overview_box)
+        self.family_overview_scroll = QtWidgets.QScrollArea()
+        self.family_overview_scroll.setWidgetResizable(True)
+        self.family_overview_scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
+        self.family_overview_scroll.setWidget(self.family_overview_box)
+        right.addWidget(self.family_overview_scroll)
 
         main_splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal)
         main_splitter.setOpaqueResize(True)
@@ -269,6 +272,7 @@ class PeriodicTableTab(QtWidgets.QWidget):
                 text=self._theme_colors["text"],
             )
         )
+        self.family_overview_scroll.setStyleSheet("background: transparent;")
         self.colorbar_widget.apply_theme(tokens)
         self.legend_container.setStyleSheet(f"color: {self._theme_colors['text']};")
         for swatch in self.legend_swatches:
@@ -722,7 +726,6 @@ class PeriodicTableTab(QtWidgets.QWidget):
             config = self._config_string(subshells)
         states = self._parse_oxidation_states(elem)
         formatted_states = self._format_oxidation_states(states)
-        stp_note = "Values at STP (0 °C, 1 atm)."
         rows = []
         numeric_fields = {
             "atomicMass",
@@ -770,14 +773,15 @@ class PeriodicTableTab(QtWidgets.QWidget):
             f"<td>{config} "
             "<a href='toggle-config'>(toggle)</a></td></tr>"
         )
-        rows.append(f"<tr><td><b>STP</b></td><td>{stp_note}</td></tr>")
+        notes_html = element_notes_html(elem.get("symbol", ""), include_title=False)
+        rows.append(f"<tr><td><b>{SECTION_LABELS['element_title']}</b></td><td>{notes_html}</td></tr>")
         if "name" in elem:
             pubchem_link = f"https://pubchem.ncbi.nlm.nih.gov/element/{elem['name']}"
             rows.append(f"<tr><td><b>PubChem</b></td><td><a href='{pubchem_link}'>{pubchem_link}</a></td></tr>")
         rows.append("<tr><td><b>Data Source</b></td><td><a href='https://pubchem.ncbi.nlm.nih.gov/'>PubChem</a></td></tr>")
         family_raw = elem.get("family", "")
         family_norm = self._FAMILY_ALIASES.get(str(family_raw).lower(), family_raw) if family_raw else ""
-        fam_summary = self.FAMILY_SUMMARY.get(family_norm, "")
+        fam_summary = family_overview_html(family_norm)
         table_html = (
             "<html><body>"
             "<table style='border-collapse: collapse; width: 100%;'>"
@@ -787,8 +791,25 @@ class PeriodicTableTab(QtWidgets.QWidget):
         table_html += "</body></html>"
         self.info.setHtml(table_html)
         if fam_summary:
-            self.family_overview_box.setText(f"<b>{family_norm} overview:</b> {fam_summary}")
+            self.family_overview_box.setText(fam_summary)
             self.family_overview_box.setVisible(True)
+            self.family_overview_scroll.setVisible(True)
+            QtCore.QTimer.singleShot(0, self._update_family_overview_height)
         else:
             self.family_overview_box.clear()
             self.family_overview_box.setVisible(False)
+            self.family_overview_scroll.setVisible(False)
+
+    def _update_family_overview_height(self) -> None:
+        if not self.family_overview_scroll.isVisible():
+            return
+        viewport_width = self.family_overview_scroll.viewport().width()
+        if viewport_width <= 0:
+            return
+        doc = QtGui.QTextDocument()
+        doc.setDefaultFont(self.family_overview_box.font())
+        doc.setHtml(self.family_overview_box.text())
+        doc.setTextWidth(max(viewport_width - 16, 120))
+        height = int(doc.size().height())
+        if height > 0:
+            self.family_overview_scroll.setMinimumHeight(height + 12)

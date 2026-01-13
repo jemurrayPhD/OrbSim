@@ -61,6 +61,8 @@ class CompoundDbWorker(QtCore.QObject):
 class CompoundDatabaseDialog(QtWidgets.QDialog):
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
+        self.setObjectName("compoundDatabaseDialog")
+        self.setAttribute(QtCore.Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setWindowTitle("Compound Database")
         self.setMinimumSize(680, 520)
         self._thread: QtCore.QThread | None = None

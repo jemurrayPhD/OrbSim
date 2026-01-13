@@ -5,6 +5,9 @@ from pathlib import Path
 from PySide6 import QtCore, QtGui, QtNetwork, QtWidgets
 
 from orbsim.chem.elements import get_atomic_number, get_element, get_symbol
+from orbsim.chem.formula_format import format_formula_from_string
+from orbsim.content.compound_properties import describe_bonding_and_polarity
+from orbsim import pedagogy
 from orbsim.chem import compound_db
 
 
@@ -48,7 +51,9 @@ class CompoundDetailsDialog(QtWidgets.QDialog):
         self._pending_image_reply: QtNetwork.QNetworkReply | None = None
         self._image_cache_path = self._image_cache_dir() / f"{compound['cid']}.png"
 
-        self.setWindowTitle(f"{compound['name']} — {compound['formula']}")
+        formula_plain = format_formula_from_string(str(compound.get("formula") or "")).plain
+        title_formula = formula_plain or str(compound.get("formula") or "")
+        self.setWindowTitle(f"{compound['name']} — {title_formula}")
         self.setMinimumSize(640, 520)
         self._build_ui()
         self._populate()
@@ -60,6 +65,7 @@ class CompoundDetailsDialog(QtWidgets.QDialog):
         header_layout = QtWidgets.QHBoxLayout()
         self.title_label = QtWidgets.QLabel("")
         self.title_label.setWordWrap(True)
+        self.title_label.setTextFormat(QtCore.Qt.TextFormat.RichText)
         header_layout.addWidget(self.title_label, 1)
 
         self.pubchem_button = QtWidgets.QPushButton("Open PubChem record")
@@ -91,6 +97,12 @@ class CompoundDetailsDialog(QtWidgets.QDialog):
         self.properties_label.setWordWrap(True)
         layout.addWidget(self.properties_label)
 
+        self.pedagogy_browser = QtWidgets.QTextBrowser()
+        self.pedagogy_browser.setOpenExternalLinks(True)
+        self.pedagogy_browser.setFrameShape(QtWidgets.QFrame.NoFrame)
+        self.pedagogy_browser.setMinimumHeight(140)
+        layout.addWidget(self.pedagogy_browser)
+
         close_btn = QtWidgets.QPushButton("Close")
         close_btn.clicked.connect(self.accept)
         layout.addWidget(close_btn, 0, QtCore.Qt.AlignmentFlag.AlignRight)
@@ -99,7 +111,11 @@ class CompoundDetailsDialog(QtWidgets.QDialog):
         display = compound_db.format_compound_display(self.compound)
         title = display["primary_name"] or "Compound"
         formula_display = display["formula_display"] or self.compound.get("formula") or ""
-        self.title_label.setText(f"{title} ({formula_display})")
+        if formula_display:
+            formatted = format_formula_from_string(formula_display)
+            self.title_label.setText(f"{title} ({formatted.rich})")
+        else:
+            self.title_label.setText(title)
 
         oxidation_states, heuristic = estimate_oxidation_states(self.compound)
         if heuristic:
@@ -108,8 +124,8 @@ class CompoundDetailsDialog(QtWidgets.QDialog):
             self.oxidation_label.setText("Oxidation states")
         self._populate_oxidation_table(oxidation_states)
 
-        bonding_text, polarity_text = classify_bonding_and_polarity(self.compound)
-        self.bonding_label.setText(f"Bonding: {bonding_text}. Polarity: {polarity_text}.")
+        summary = describe_bonding_and_polarity(self.compound)
+        self.bonding_label.setText(f"{summary.bonding_sentence} {summary.polarity_sentence}")
 
         properties = [("Molecular weight", self.compound.get("mol_weight"))]
         if display["iupac_name"]:
@@ -120,6 +136,7 @@ class CompoundDetailsDialog(QtWidgets.QDialog):
         prop_lines = [f"{label}: {value}" for label, value in properties if value]
         self.properties_label.setText("Known data: " + ("; ".join(prop_lines) if prop_lines else "Unavailable"))
         self.properties_label.setToolTip("Data source: PubChem (NIH/NLM).")
+        self.pedagogy_browser.setHtml(pedagogy.compound_notes_html(self.compound.get("formula") or ""))
 
     def _populate_oxidation_table(self, oxidation_states: dict[str, int | None]) -> None:
         elements = self.compound.get("elements", {})
@@ -234,32 +251,5 @@ def estimate_oxidation_states(compound: dict) -> tuple[dict[str, int | None], bo
 
 
 def classify_bonding_and_polarity(compound: dict) -> tuple[str, str]:
-    elements = compound.get("elements", {})
-    symbols = [get_symbol(int(z)) for z in elements.keys()]
-    symbols = [s for s in symbols if s]
-    if not symbols:
-        return "Unknown", "Unknown"
-    has_metal = any(_is_metal_symbol(symbol) for symbol in symbols)
-    has_nonmetal = any(_is_nonmetal_symbol(symbol) for symbol in symbols)
-
-    if has_metal and has_nonmetal:
-        bonding = "Ionic (heuristic)"
-    elif has_metal and not has_nonmetal:
-        bonding = "Metallic (heuristic)"
-    else:
-        bonding = "Covalent (heuristic)"
-
-    en_values = [value for symbol in symbols if (value := _electronegativity_symbol(symbol)) is not None]
-    if not en_values:
-        polarity = "Unknown"
-    else:
-        max_en = max(en_values)
-        min_en = min(en_values)
-        diff = max_en - min_en
-        if diff >= 1.7:
-            polarity = "Polar (high ΔEN)"
-        elif diff >= 0.4:
-            polarity = "Polar (moderate ΔEN)"
-        else:
-            polarity = "Nonpolar (low ΔEN)"
-    return bonding, polarity
+    summary = describe_bonding_and_polarity(compound)
+    return summary.bonding_sentence, summary.polarity_sentence

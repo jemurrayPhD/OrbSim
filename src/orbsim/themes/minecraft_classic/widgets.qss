@@ -27,6 +27,20 @@ QTabBar::tab:disabled {
   color: #4a4a4a;
 }
 
+QDialog#compoundDatabaseDialog {
+  background: #c6c6c6;
+  color: #1a1a1a;
+}
+
+QDialog#compoundDatabaseDialog QGroupBox {
+  background: #c6c6c6;
+  color: #1a1a1a;
+}
+
+QDialog#compoundDatabaseDialog QGroupBox::title {
+  color: #1a1a1a;
+}
+
 QWidget:disabled,
 QLabel:disabled,
 QGroupBox:disabled,
@@ -99,6 +113,52 @@ QTreeWidget {
   background: #c6c6c6;
   padding: 4px 6px;
   color: #1a1a1a;
+}
+
+QMenuBar {
+  background: #c6c6c6;
+  border-bottom: 2px solid #303030;
+}
+
+QMenuBar::item {
+  background: transparent;
+  color: #1a1a1a;
+  padding: 2px 8px;
+  margin: 0 2px;
+}
+
+QMenuBar::item:selected {
+  background: #8daed0;
+  color: #1a1a1a;
+}
+
+QMenuBar::item:disabled {
+  color: #4a4a4a;
+}
+
+QMenu {
+  background: #c6c6c6;
+  color: #1a1a1a;
+  border: 2px solid #303030;
+}
+
+QMenu::item {
+  padding: 4px 12px;
+}
+
+QMenu::item:selected {
+  background: #8daed0;
+  color: #1a1a1a;
+}
+
+QMenu::item:disabled {
+  color: #4a4a4a;
+}
+
+QMenu::separator {
+  height: 1px;
+  background: #5a5a5a;
+  margin: 4px 6px;
 }
 
 QLineEdit:focus,

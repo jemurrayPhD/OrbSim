@@ -7,7 +7,8 @@ from PySide6 import QtCore, QtWidgets
 
 from orbsim.chem import compound_db
 from orbsim.chem.compound_db import db_exists, get_compound_details, get_db_path, query_compounds_by_elements
-from orbsim.chem.elements import get_atomic_number, get_symbol
+from orbsim.chem.elements import get_atomic_number
+from orbsim.chem.formula_format import format_formula, format_formula_from_string
 from orbsim.chem.formula_parser import parse_formula
 from orbsim.ui.generated.ui_compound_builder import Ui_CompoundBuilderTab
 from orbsim.widgets import CraftingTableWidget, CompoundPreviewPane, PeriodicTableInventoryWidget
@@ -47,6 +48,7 @@ class CompoundBuilderTab(QtWidgets.QWidget):
         self.ui.inventorySection.setMinimumHeight(260)
         self.ui.craftingLayout.setSpacing(10)
         self.ui.currentElementsLabel.setContentsMargins(0, 6, 0, 0)
+        self.ui.currentElementsLabel.setTextFormat(QtCore.Qt.TextFormat.RichText)
         self.upper_splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal, self)
         for section in (self.ui.craftingSection, self.ui.recipeSection, self.ui.dataSection):
             self.ui.upperLayout.removeWidget(section)
@@ -68,7 +70,6 @@ class CompoundBuilderTab(QtWidgets.QWidget):
         self.crafting_grid.crafting_changed.connect(self._on_crafting_changed)
         self.ui.recipeListWidget.itemSelectionChanged.connect(self._select_compound)
         self.ui.buildDbButton.clicked.connect(self._start_build)
-        self.inventory_widget.element_clicked.connect(self._add_element_from_inventory)
 
         self.ui.buildProgressBar.setRange(0, 1)
         self._update_db_state()
@@ -126,21 +127,12 @@ class CompoundBuilderTab(QtWidgets.QWidget):
         self._update_current_elements_label(counts)
         self._queue_refresh()
 
-    def _add_element_from_inventory(self, atomic_number: int) -> None:
-        self.crafting_grid.add_element_to_first_empty(atomic_number)
-
     def _update_current_elements_label(self, counts: dict[int, int]) -> None:
         if not counts:
             self.ui.currentElementsLabel.setText("Current elements: (none)")
             return
-        parts = []
-        for atomic_number in sorted(counts):
-            symbol = get_symbol(atomic_number)
-            if not symbol:
-                continue
-            count = counts[atomic_number]
-            parts.append(f"{symbol}{count if count > 1 else ''}")
-        self.ui.currentElementsLabel.setText("Current elements: " + " ".join(parts))
+        display = format_formula(counts)
+        self.ui.currentElementsLabel.setText(f"Current elements: {display.rich}")
 
     def _apply_formula(self) -> None:
         text = self.ui.formulaLineEdit.text().strip()
@@ -196,7 +188,8 @@ class CompoundBuilderTab(QtWidgets.QWidget):
             display = compound_db.format_compound_display(result)
             primary = display["primary_name"]
             formula_display = display["formula_display"] or result["formula"]
-            label = f"{primary} — {formula_display}"
+            formula_text = format_formula_from_string(formula_display).plain
+            label = f"{primary} — {formula_text}"
             item = QtWidgets.QListWidgetItem(label)
             item.setData(QtCore.Qt.ItemDataRole.UserRole, result["cid"])
             self.ui.recipeListWidget.addItem(item)

@@ -4,6 +4,7 @@ import math
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
+from orbsim.chem.aufbau import AUFBAU_EXCEPTION_ADJUSTMENTS
 from orbsim.theming.theme_manager import get_theme_manager
 
 def _contrast_text(base: QtGui.QColor, light: QtGui.QColor, dark: QtGui.QColor) -> QtGui.QColor:
@@ -236,6 +237,7 @@ class BohrViewer(QtWidgets.QWidget):
         super().__init__(parent)
         self.elem: dict | None = None
         self.oxidation_state: int = 0
+        self._show_shell_labels = True
         self._theme_colors = {
             "accent": "#2563eb",
             "border": "#cbd5e1",
@@ -268,6 +270,18 @@ class BohrViewer(QtWidgets.QWidget):
 
     def set_element(self, elem: dict) -> None:
         self.elem = elem
+        self.update()
+
+    def legend_colors(self) -> dict[str, QtGui.QColor]:
+        return {
+            "empty": QtGui.QColor(self._semantic_colors["vacancy"]),
+            "occupied": QtGui.QColor(self._semantic_colors["electron"]),
+            "filled": QtGui.QColor(self._semantic_colors["filled"]),
+            "text": QtGui.QColor(self._theme_colors["text"]),
+        }
+
+    def set_show_shell_labels(self, show: bool) -> None:
+        self._show_shell_labels = bool(show)
         self.update()
 
     def set_oxidation_state(self, oxidation: int) -> None:
@@ -320,15 +334,7 @@ class BohrViewer(QtWidgets.QWidget):
             subshells[(n, l)] = fill
             remaining -= fill
 
-        adjustments: dict[int, dict[tuple[int, int], int]] = {
-            24: {(4, 0): -1, (3, 2): 1},
-            29: {(4, 0): -1, (3, 2): 1},
-            42: {(5, 0): -1, (4, 2): 1},
-            46: {(5, 0): -2, (4, 2): 2},
-            47: {(5, 0): -1, (4, 2): 1},
-            79: {(6, 0): -1, (5, 2): 1},
-        }
-        adj = adjustments.get(int(total_e))
+        adj = AUFBAU_EXCEPTION_ADJUSTMENTS.get(int(total_e))
         if adj:
             for (n, l), delta in adj.items():
                 subshells[(n, l)] = max(0, subshells.get((n, l), 0) + delta)
@@ -443,7 +449,7 @@ class BohrViewer(QtWidgets.QWidget):
                     painter.setBrush(QtCore.Qt.NoBrush)
                     painter.setPen(QtGui.QPen(border, 2))
                     painter.drawEllipse(center, radius, radius)
-                    if l == lmax:
+                    if l == lmax and self._show_shell_labels:
                         painter.setPen(QtGui.QPen(text))
                         label_offset = radius * 0.12
                         painter.drawText(center + QtCore.QPointF(radius + label_offset, -label_offset), f"n={n}")
@@ -657,21 +663,62 @@ class OrbitalBoxView(QtWidgets.QWidget):
     def _degeneracy(self, l: int) -> int:
         return {0: 1, 1: 3, 2: 5, 3: 7}.get(l, 1)
 
-    def _fill_orbitals(self, electrons: int, deg: int) -> list[list[str]]:
-        orbitals = [["", ""] for _ in range(deg)]
+    def _fill_orbitals(self, electrons: int, deg: int) -> list[list[bool]]:
+        orbitals = [[False, False] for _ in range(deg)]
         cap = 2 * deg
         electrons = max(0, min(electrons, cap))
         idx = 0
         while electrons > 0 and idx < deg:
-            orbitals[idx][0] = "↑"
+            orbitals[idx][0] = True
             electrons -= 1
             idx += 1
         idx = 0
         while electrons > 0 and idx < deg:
-            orbitals[idx][1] = "↓"
+            orbitals[idx][1] = True
             electrons -= 1
             idx += 1
         return orbitals
+
+    def _draw_spin_arrows(self, painter: QtGui.QPainter, rect: QtCore.QRectF, up: bool, down: bool) -> None:
+        if not up and not down:
+            return
+        center_x = rect.center().x()
+        center_y = rect.center().y()
+        arrow_len = rect.height() * 0.55
+        head_size = min(rect.width(), rect.height()) * 0.18
+        half_len = arrow_len / 2.0
+        if up and down:
+            offset = rect.width() * 0.18
+            x_positions = [center_x - offset, center_x + offset]
+        else:
+            x_positions = [center_x]
+        for idx, x_pos in enumerate(x_positions):
+            draw_up = up if len(x_positions) == 1 else idx == 0
+            draw_down = down if len(x_positions) == 1 else idx == 1
+            if draw_up:
+                top_y = center_y - half_len
+                bottom_y = center_y + half_len
+                painter.drawLine(QtCore.QPointF(x_pos, bottom_y), QtCore.QPointF(x_pos, top_y))
+                painter.drawLine(
+                    QtCore.QPointF(x_pos, top_y),
+                    QtCore.QPointF(x_pos - head_size, top_y + head_size),
+                )
+                painter.drawLine(
+                    QtCore.QPointF(x_pos, top_y),
+                    QtCore.QPointF(x_pos + head_size, top_y + head_size),
+                )
+            if draw_down:
+                top_y = center_y - half_len
+                bottom_y = center_y + half_len
+                painter.drawLine(QtCore.QPointF(x_pos, top_y), QtCore.QPointF(x_pos, bottom_y))
+                painter.drawLine(
+                    QtCore.QPointF(x_pos, bottom_y),
+                    QtCore.QPointF(x_pos - head_size, bottom_y - head_size),
+                )
+                painter.drawLine(
+                    QtCore.QPointF(x_pos, bottom_y),
+                    QtCore.QPointF(x_pos + head_size, bottom_y - head_size),
+                )
 
     def paintEvent(self, event):
         painter = QtGui.QPainter(self)
@@ -761,10 +808,6 @@ class OrbitalBoxView(QtWidgets.QWidget):
                 label = f"{n}{label_map.get(l, '?')}"
                 painter.drawText(x, y - 6, label)
 
-                arrow_font = painter.font()
-                arrow_font.setBold(True)
-                arrow_font.setPointSize(max(int(box_h * 0.65), 10))
-                painter.setFont(arrow_font)
                 for j, (up, down) in enumerate(boxes):
                     bx = x + j * (box_w + spacing)
                     by = y
@@ -776,11 +819,8 @@ class OrbitalBoxView(QtWidgets.QWidget):
                     else:
                         painter.setPen(QtGui.QPen(border, 2))
                     painter.drawRect(rect)
-                    if up:
-                        painter.setPen(QtGui.QPen(electron, 2.5))
-                        painter.drawText(rect, QtCore.Qt.AlignmentFlag.AlignCenter, up)
-                    if down:
-                        painter.setPen(QtGui.QPen(electron, 2.5))
-                        painter.drawText(rect, QtCore.Qt.AlignmentFlag.AlignCenter, down)
+                    if up or down:
+                        painter.setPen(QtGui.QPen(electron, 2.0))
+                        self._draw_spin_arrows(painter, rect, up, down)
         finally:
             painter.end()

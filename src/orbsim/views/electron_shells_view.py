@@ -5,6 +5,52 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from orbsim.views.periodic_table_view import BohrViewer, OrbitalBoxView, SubshellMiniWidget
 
 
+class BohrLegendWidget(QtWidgets.QWidget):
+    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._dot_size = 10
+        layout = QtWidgets.QHBoxLayout(self)
+        layout.setContentsMargins(0, 4, 0, 0)
+        layout.setSpacing(10)
+
+        self._empty_dot = QtWidgets.QLabel()
+        self._empty_label = QtWidgets.QLabel("Empty")
+        self._occupied_dot = QtWidgets.QLabel()
+        self._occupied_label = QtWidgets.QLabel("Occupied")
+        self._filled_dot = QtWidgets.QLabel()
+        self._filled_label = QtWidgets.QLabel("Filled subshell")
+
+        for dot in (self._empty_dot, self._occupied_dot, self._filled_dot):
+            dot.setFixedSize(self._dot_size, self._dot_size)
+
+        layout.addWidget(self._empty_dot)
+        layout.addWidget(self._empty_label)
+        layout.addSpacing(8)
+        layout.addWidget(self._occupied_dot)
+        layout.addWidget(self._occupied_label)
+        layout.addSpacing(8)
+        layout.addWidget(self._filled_dot)
+        layout.addWidget(self._filled_label)
+        layout.addStretch()
+
+    def apply_theme(self, tokens: dict, bohr_view: BohrViewer) -> None:
+        colors = bohr_view.legend_colors()
+        theme_colors = tokens.get("colors", {})
+        text = theme_colors.get("text", colors["text"].name())
+        border = theme_colors.get("border", "#303030")
+        self._set_dot_style(self._empty_dot, colors["empty"].name(), border)
+        self._set_dot_style(self._occupied_dot, colors["occupied"].name(), border)
+        self._set_dot_style(self._filled_dot, colors["filled"].name(), border)
+        for label in (self._empty_label, self._occupied_label, self._filled_label):
+            label.setStyleSheet(f"color: {text};")
+
+    def _set_dot_style(self, widget: QtWidgets.QLabel, color: str, border: str) -> None:
+        radius = self._dot_size // 2
+        widget.setStyleSheet(
+            f"background: {color}; border: 1px solid {border}; border-radius: {radius}px;"
+        )
+
+
 class SubshellGridView(QtWidgets.QWidget):
     def __init__(self, bohr_view: BohrViewer, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)

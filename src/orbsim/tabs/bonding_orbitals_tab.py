@@ -730,15 +730,7 @@ class BondingOrbitalsTab(AtomicOrbitalsTab):
             except Exception as exc:
                 print(f"Render error: {exc}", file=sys.stderr)
         if self.volume_renderer_mode == "auto" and not self._auto_volume_fallback_attempted:
-            if self._last_volume_mapper_mode == "gpu" and self._volume_render_seems_blank():
-                self._auto_volume_fallback_attempted = True
-                self.volume_renderer_mode = "cpu"
-                if self.volume_renderer_combo:
-                    self.volume_renderer_combo.blockSignals(True)
-                    self.volume_renderer_combo.setCurrentIndex(2)
-                    self.volume_renderer_combo.blockSignals(False)
-                self._show_volume_status("Switched to CPU volume renderer for compatibility.")
-                self._render_orbital(reuse_camera=False, reuse_slice=False)
+            self._handle_auto_volume_fallback(lambda: self._render_orbital(reuse_camera=False, reuse_slice=False))
         if reuse_slice and slice_camera:
             try:
                 self.slice_view.camera_position = slice_camera
