@@ -1,0 +1,123 @@
+{
+  "H2O": {
+    "title": "Water (H2O)",
+    "summary": "Water is a polar molecule that dissolves many ionic and polar substances.",
+    "properties": [
+      "Liquid at room temperature with high heat capacity.",
+      "Bent geometry and polarity enable hydrogen bonding.",
+      "Expands on freezing, which lowers the density of ice."
+    ],
+    "applications": [
+      "Universal solvent in biology and chemistry.",
+      "Used in cooling, cleaning, and as a reaction medium."
+    ],
+    "links": [
+      {
+        "label": "Britannica",
+        "url": "https://www.britannica.com/science/water"
+      },
+      {
+        "label": "LibreTexts",
+        "url": "https://chem.libretexts.org/Bookshelves/Physical_and_Theoretical_Chemistry_Textbook_Maps/Supplemental_Modules_(Physical_and_Theoretical_Chemistry)/Physical_Properties_of_Matter/States_of_Matter/Properties_of_Liquids/Properties_of_Water"
+      }
+    ]
+  },
+  "NaCl": {
+    "title": "Sodium chloride (NaCl)",
+    "summary": "Sodium chloride is an ionic solid made of Na+ and Cl- ions arranged in a crystal lattice.",
+    "properties": [
+      "High melting point due to strong ionic bonding.",
+      "Soluble in water, producing an electrolyte solution.",
+      "Brittle crystalline structure."
+    ],
+    "applications": [
+      "Table salt and food preservation.",
+      "De-icing roads and industrial brine production."
+    ],
+    "links": [
+      {
+        "label": "Britannica",
+        "url": "https://www.britannica.com/science/sodium-chloride"
+      },
+      {
+        "label": "LibreTexts",
+        "url": "https://chem.libretexts.org/Bookshelves/General_Chemistry/Map%3A_Chemistry_(OpenStax)/04%3A_Ionic_Bonding_and_Simple_Ionic_Compounds/4.2%3A_Ionic_Bonding"
+      }
+    ]
+  },
+  "CO2": {
+    "title": "Carbon dioxide (CO2)",
+    "summary": "Carbon dioxide is a linear, nonpolar molecule that is a common product of combustion and respiration.",
+    "properties": [
+      "Gas at room temperature with low reactivity.",
+      "Sublimes at -78.5 deg C to dry ice.",
+      "Acts as a greenhouse gas by absorbing infrared radiation."
+    ],
+    "applications": [
+      "Used in carbonation of beverages and fire extinguishers.",
+      "Dry ice provides cooling without liquid residue."
+    ],
+    "links": [
+      {
+        "label": "Britannica",
+        "url": "https://www.britannica.com/science/carbon-dioxide"
+      }
+    ]
+  },
+  "NH3": {
+    "title": "Ammonia (NH3)",
+    "summary": "Ammonia is a polar molecule with a lone pair on nitrogen and a pungent odor.",
+    "properties": [
+      "Basic in water, forming ammonium and hydroxide ions.",
+      "Strong hydrogen bonding leads to a higher boiling point than similar mass gases."
+    ],
+    "applications": [
+      "Key feedstock for fertilizers and nitric acid production.",
+      "Used in refrigeration systems and household cleaners."
+    ],
+    "safety": "Ammonia gas is toxic and irritating; avoid inhalation and use ventilation.",
+    "links": [
+      {
+        "label": "Britannica",
+        "url": "https://www.britannica.com/science/ammonia"
+      }
+    ]
+  },
+  "CH4": {
+    "title": "Methane (CH4)",
+    "summary": "Methane is a tetrahedral, nonpolar molecule and the main component of natural gas.",
+    "properties": [
+      "Low boiling point and high flammability.",
+      "Nonpolar with weak intermolecular forces."
+    ],
+    "applications": [
+      "Fuel for heating and electricity generation.",
+      "Feedstock for hydrogen and methanol production."
+    ],
+    "safety": "Methane is flammable; use proper leak detection in enclosed spaces.",
+    "links": [
+      {
+        "label": "Britannica",
+        "url": "https://www.britannica.com/science/methane"
+      }
+    ]
+  },
+  "Fe2O3": {
+    "title": "Iron(III) oxide (Fe2O3)",
+    "summary": "Iron(III) oxide is a common iron oxide found in rust and hematite.",
+    "properties": [
+      "Reddish-brown solid with mixed ionic and covalent bonding.",
+      "Insoluble in water and stable at room temperature."
+    ],
+    "applications": [
+      "Used as a pigment and in polishing compounds.",
+      "Hematite is an important iron ore."
+    ],
+    "links": [
+      {
+        "label": "Britannica",
+        "url": "https://www.britannica.com/science/hematite"
+      }
+    ]
+  }
+}

@@ -1,9 +1,14 @@
 from __future__ import annotations
 
-from PySide6 import QtCore, QtGui, QtWidgets
+from PySide6 import QtCore, QtWidgets
 
+from orbsim.chem.aufbau import build_aufbau_exception_note, expected_aufbau_subshells, subshells_to_config
+from orbsim.chem.electron_configuration import summarize_configuration
+from orbsim.content.electron_shells_text import PROPERTIES_TITLE, aufbau_note_html, properties_html
+from orbsim import pedagogy
 from orbsim.ui.generated.ui_electron_shells import Ui_ElectronShellsTab
-from orbsim.views.electron_shells_view import OrbitalBoxContainer, SubshellGridView
+from orbsim.ui.expandable_text import ExpandableTextPopup
+from orbsim.views.electron_shells_view import BohrLegendWidget, OrbitalBoxContainer, SubshellGridView
 from orbsim.views.periodic_table_view import BohrViewer
 from periodic_table_cli.cli import load_data
 
@@ -16,26 +21,64 @@ class ElectronShellsTab(QtWidgets.QWidget):
         self.data = load_data()
         self.current_element: dict | None = None
         self.current_oxidation: int = 0
+        self._aufbau_diff_color = "#b91c1c"
 
         layout = self.ui.contentLayout
         controls = QtWidgets.QHBoxLayout()
-        controls.addWidget(QtWidgets.QLabel("Element:"))
+        controls_left = QtWidgets.QVBoxLayout()
+        controls_left.setContentsMargins(0, 0, 0, 0)
+        element_row = QtWidgets.QHBoxLayout()
+        element_row.addWidget(QtWidgets.QLabel("Element:"))
         self.element_combo = QtWidgets.QComboBox()
         self._populate_elements()
         self.element_combo.setSizeAdjustPolicy(QtWidgets.QComboBox.AdjustToContents)
         self.element_combo.setMaximumWidth(260)
-        controls.addWidget(self.element_combo)
+        element_row.addWidget(self.element_combo)
         self.prev_btn = QtWidgets.QPushButton("Previous")
         self.next_btn = QtWidgets.QPushButton("Next")
-        controls.addWidget(self.prev_btn)
-        controls.addWidget(self.next_btn)
-        controls.addWidget(QtWidgets.QLabel("Oxidation state:"))
+        element_row.addWidget(self.prev_btn)
+        element_row.addWidget(self.next_btn)
+        element_row.addStretch()
+        controls_left.addLayout(element_row)
+        oxidation_row = QtWidgets.QHBoxLayout()
+        oxidation_row.addWidget(QtWidgets.QLabel("Oxidation state:"))
         self.oxidation_combo = QtWidgets.QComboBox()
-        controls.addWidget(self.oxidation_combo)
-        controls.addStretch()
+        oxidation_row.addWidget(self.oxidation_combo)
+        oxidation_row.addStretch()
+        controls_left.addLayout(oxidation_row)
+        controls_left_widget = QtWidgets.QWidget()
+        controls_left_widget.setLayout(controls_left)
+        controls_left_widget.setSizePolicy(QtWidgets.QSizePolicy.Policy.Maximum, QtWidgets.QSizePolicy.Policy.Preferred)
+        controls.addWidget(controls_left_widget)
+        self.properties_box = QtWidgets.QFrame()
+        self.properties_box.setObjectName("configPropertiesBox")
+        properties_layout = QtWidgets.QVBoxLayout(self.properties_box)
+        properties_layout.setContentsMargins(8, 6, 8, 6)
+        properties_layout.setSpacing(4)
+        self.properties_title = QtWidgets.QLabel(PROPERTIES_TITLE)
+        self.properties_title.setStyleSheet("font-weight: bold;")
+        properties_layout.addWidget(self.properties_title)
+        self.properties_text = QtWidgets.QTextBrowser()
+        self.properties_text.setReadOnly(True)
+        self.properties_text.setFrameShape(QtWidgets.QFrame.NoFrame)
+        self.properties_text.setOpenExternalLinks(True)
+        self.properties_text.setMaximumHeight(140)
+        self.properties_text.setMinimumHeight(140)
+        properties_layout.addWidget(self.properties_text)
+        self.properties_box.setMinimumWidth(320)
+        self.properties_box.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Preferred)
+        controls.addWidget(self.properties_box, 1)
+        self._properties_expander = ExpandableTextPopup(
+            self.properties_text,
+            anchor=self.properties_box,
+            frame_style_source=self.properties_box,
+            trigger_widgets=(self.properties_box, self.properties_title, self.properties_text.viewport()),
+        )
         layout.addLayout(controls)
 
         self.bohr_view = BohrViewer()
+        self.bohr_view.set_show_shell_labels(False)
+        self.bohr_legend = BohrLegendWidget()
         self.subshell_view = SubshellGridView(self.bohr_view)
         self.box_container = OrbitalBoxContainer(self.bohr_view)
 
@@ -43,11 +86,22 @@ class ElectronShellsTab(QtWidgets.QWidget):
         self.config_label.setWordWrap(True)
         layout.addWidget(self.config_label)
 
+        self.aufbau_note = QtWidgets.QFrame()
+        self.aufbau_note.setObjectName("aufbauNote")
+        aufbau_layout = QtWidgets.QVBoxLayout(self.aufbau_note)
+        aufbau_layout.setContentsMargins(8, 6, 8, 6)
+        self.aufbau_note_label = QtWidgets.QLabel()
+        self.aufbau_note_label.setWordWrap(True)
+        self.aufbau_note_label.setTextFormat(QtCore.Qt.TextFormat.RichText)
+        aufbau_layout.addWidget(self.aufbau_note_label)
+        self.aufbau_note.setVisible(False)
+        layout.addWidget(self.aufbau_note)
+
         splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal)
         splitter.setOpaqueResize(True)
         splitter.setChildrenCollapsible(False)
         self._wrap_containers: list[QtWidgets.QWidget] = []
-        splitter.addWidget(self._wrap_with_label("Bohr model", self.bohr_view))
+        splitter.addWidget(self._wrap_with_label("Bohr model", self.bohr_view, self.bohr_legend))
         splitter.addWidget(self._wrap_with_label("Expanded subshells", self.subshell_view))
         splitter.addWidget(self._wrap_with_label("Orbital box view", self.box_container))
         splitter.setStretchFactor(0, 3)
@@ -78,11 +132,27 @@ class ElectronShellsTab(QtWidgets.QWidget):
         )
         for container in getattr(self, "_wrap_containers", []):
             container.setStyleSheet(self._wrap_style)
+        self.properties_box.setStyleSheet(
+            f"QFrame#configPropertiesBox {{ background: {bg}; border: 1px solid {border}; border-radius: 6px; }}"
+            f"QLabel {{ color: {text}; }}"
+        )
+        self.properties_text.setStyleSheet(f"color: {text}; background: transparent;")
+        self.aufbau_note.setStyleSheet(
+            f"QFrame#aufbauNote {{ background: {colors.get('surfaceAlt', bg)}; "
+            f"border: 1px solid {colors.get('focusRing', border)}; border-radius: 6px; }}"
+            f"QLabel {{ color: {text}; }}"
+        )
         self.bohr_view.apply_theme(tokens)
+        self.bohr_legend.apply_theme(tokens, self.bohr_view)
         self.subshell_view.apply_theme(tokens)
         self.box_container.apply_theme(tokens)
 
-    def _wrap_with_label(self, title: str, widget: QtWidgets.QWidget) -> QtWidgets.QWidget:
+    def _wrap_with_label(
+        self,
+        title: str,
+        widget: QtWidgets.QWidget,
+        footer: QtWidgets.QWidget | None = None,
+    ) -> QtWidgets.QWidget:
         container = QtWidgets.QWidget()
         lay = QtWidgets.QVBoxLayout(container)
         lay.setContentsMargins(8, 8, 8, 8)
@@ -90,6 +160,8 @@ class ElectronShellsTab(QtWidgets.QWidget):
         lbl.setStyleSheet("font-weight: bold;")
         lay.addWidget(lbl)
         lay.addWidget(widget, 1)
+        if footer is not None:
+            lay.addWidget(footer, 0)
         container.setStyleSheet(getattr(self, "_wrap_style", ""))
         self._wrap_containers.append(container)
         return container
@@ -155,21 +227,22 @@ class ElectronShellsTab(QtWidgets.QWidget):
         full_cfg = self._config_string(subshells)
         abbrev = self._config_abbrev(self.current_element, subshells)
         self.config_label.setText(f"Full: {full_cfg}\nAbbrev: {abbrev}")
+        summary = summarize_configuration(self.current_element, subshells, int(self.current_oxidation))
+        notes_html = pedagogy.element_notes_html(summary.symbol)
+        combined_html = f"{properties_html(summary)}<hr/>{notes_html}"
+        self.properties_text.setHtml(combined_html)
+        total_e = summary.total_electrons
+        expected = expected_aufbau_subshells(total_e)
+        note = build_aufbau_exception_note(total_e, expected, subshells)
+        if note:
+            self.aufbau_note_label.setText(aufbau_note_html(note, diff_color=self._aufbau_diff_color))
+            self.aufbau_note.setVisible(True)
+        else:
+            self.aufbau_note_label.clear()
+            self.aufbau_note.setVisible(False)
 
     def _config_string(self, subshells: dict[tuple[int, int], int]) -> str:
-        subshell_order = [
-            (1, 0), (2, 0), (2, 1), (3, 0), (3, 1),
-            (4, 0), (3, 2), (4, 1), (5, 0), (4, 2),
-            (5, 1), (6, 0), (4, 3), (5, 2), (6, 1),
-            (7, 0), (5, 3), (6, 2), (7, 1),
-        ]
-        parts = []
-        label_map = {0: "s", 1: "p", 2: "d", 3: "f"}
-        for n, l in subshell_order:
-            if (n, l) in subshells:
-                cnt = subshells[(n, l)]
-                parts.append(f"{n}{label_map.get(l, '?')}{cnt}")
-        return " ".join(parts)
+        return subshells_to_config(subshells)
 
     def _config_abbrev(self, elem: dict, subshells: dict[tuple[int, int], int]) -> str:
         noble_gases = [

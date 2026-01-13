@@ -4,6 +4,7 @@ import random
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
+from orbsim.chem.formula_format import format_formula_from_string
 from orbsim.nomenclature import load_practice_pool, load_tutorial_content
 
 
@@ -39,9 +40,11 @@ class ChemicalNomenclatureDialog(QtWidgets.QDialog):
 
     def _build_tutorial_tab(self) -> QtWidgets.QWidget:
         container = QtWidgets.QWidget()
-        layout = QtWidgets.QHBoxLayout(container)
+        wrapper = QtWidgets.QVBoxLayout(container)
+        layout = QtWidgets.QHBoxLayout()
 
         self.topic_list = QtWidgets.QListWidget()
+        self.topic_list.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
         layout.addWidget(self.topic_list, 1)
 
         self.topic_content = QtWidgets.QTextEdit()
@@ -53,10 +56,8 @@ class ChemicalNomenclatureDialog(QtWidgets.QDialog):
         )
         self.tutorial_footer.setWordWrap(True)
 
-        wrapper = QtWidgets.QVBoxLayout()
         wrapper.addLayout(layout)
         wrapper.addWidget(self.tutorial_footer)
-        container.setLayout(wrapper)
         return container
 
     def _build_practice_tab(self) -> QtWidgets.QWidget:
@@ -132,6 +133,7 @@ class ChemicalNomenclatureDialog(QtWidgets.QDialog):
         prompt_font.setBold(True)
         self.prompt_label.setFont(prompt_font)
         self.prompt_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.prompt_label.setTextFormat(QtCore.Qt.TextFormat.RichText)
         card_layout.addWidget(self.prompt_label)
 
         self.answer_input = QtWidgets.QLineEdit()
@@ -157,6 +159,7 @@ class ChemicalNomenclatureDialog(QtWidgets.QDialog):
 
         self.hint_label = QtWidgets.QLabel("")
         self.hint_label.setWordWrap(True)
+        self.hint_label.setTextFormat(QtCore.Qt.TextFormat.RichText)
         card_layout.addWidget(self.hint_label)
 
         layout.addWidget(self.card, 1)
@@ -167,10 +170,17 @@ class ChemicalNomenclatureDialog(QtWidgets.QDialog):
     def _load_tutorial(self) -> None:
         content = load_tutorial_content()
         self.topic_list.clear()
+        titles: list[str] = []
         for key, payload in content.items():
-            item = QtWidgets.QListWidgetItem(payload.get("title", key))
+            title = payload.get("title", key)
+            titles.append(title)
+            item = QtWidgets.QListWidgetItem(title)
             item.setData(QtCore.Qt.ItemDataRole.UserRole, key)
             self.topic_list.addItem(item)
+        if titles:
+            metrics = self.topic_list.fontMetrics()
+            max_width = max(metrics.horizontalAdvance(title) for title in titles)
+            self.topic_list.setMinimumWidth(max_width + 32)
         self.topic_list.currentItemChanged.connect(self._on_topic_changed)
         if self.topic_list.count() > 0:
             self.topic_list.setCurrentRow(0)
@@ -244,7 +254,8 @@ class ChemicalNomenclatureDialog(QtWidgets.QDialog):
         self._current_entry = random.choice(options)
         mode = self.mode_combo.currentText()
         if mode.startswith("Formula"):
-            prompt = self._current_entry.get("formula", "—")
+            raw = self._current_entry.get("formula", "—")
+            prompt = format_formula_from_string(raw).rich if raw else "—"
         else:
             prompt = self._current_entry.get("primary_name", "—")
         self.prompt_label.setText(prompt)
@@ -302,7 +313,8 @@ class ChemicalNomenclatureDialog(QtWidgets.QDialog):
         if mode.startswith("Formula"):
             answer = self._current_entry.get("primary_name", "")
         else:
-            answer = self._current_entry.get("formula", "")
+            raw = self._current_entry.get("formula", "")
+            answer = format_formula_from_string(raw).rich if raw else ""
         hint = self._current_entry.get("hint", "")
         self.hint_label.setText(f"Answer: {answer}. {hint}")
         self._animate_reveal()
